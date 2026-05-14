@@ -292,61 +292,33 @@ function loadWoodTex(){
 }
 
 // Wood grain on the source JPG runs along the IMAGE'S HORIZONTAL axis (U direction).
-// For a plank we want grain along its LONGEST world axis.
-// For each mesh: figure out which UV axis (U or V) is the one that varies along the
-// mesh's longest world axis. If V is the long one, rotate texture 90° so grain follows.
-// Then tile only along the long axis so the wood pattern repeats believably on long planks.
+// To make grain follow each plank's LENGTH reliably, we IGNORE the authored UVs and
+// regenerate them in local space: U = position along the mesh's longest axis,
+// V = position along the second-longest. Tile size ≈ 0.7m per texture repeat.
 function alignWoodToMesh(mesh, baseTex){
   const geom = mesh.geometry;
   geom.computeBoundingBox();
   const bb = geom.boundingBox;
-  const size = new THREE.Vector3(); bb.getSize(size);
+  const size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
 
-  // Longest world axis (x or z typically; y is height for furniture)
-  const axes = [
-    { name:'x', size:size.x, getter: i => pos.getX(i) },
-    { name:'y', size:size.y, getter: i => pos.getY(i) },
-    { name:'z', size:size.z, getter: i => pos.getZ(i) },
-  ];
+  // Sort axes by extent, descending
+  const idx = [0,1,2].sort((a,b) => size[b] - size[a]);
+  const PRI = idx[0]; // longest axis  → grain direction (U)
+  const SEC = idx[1]; // second axis   → V
+
+  const tile = 0.7;
   const pos = geom.attributes.position;
-  const uv  = geom.attributes.uv;
-  axes.sort((a,b) => b.size - a.size);
-  const longAxis = axes[0];
-
-  const t = baseTex.clone();
-  t.needsUpdate = true;
-  t.center.set(0.5, 0.5);
-
-  if (!uv){
-    // No UVs — use a flat fallback (rare case)
-    const repeats = Math.max(1, Math.round(longAxis.size / 0.7));
-    t.repeat.set(repeats, 1);
-    return t;
-  }
-
-  // Find the two extreme vertices along the long axis, compare their UV deltas.
-  let lo = Infinity, hi = -Infinity, iLo = 0, iHi = 0;
+  const arr = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++){
-    const v = longAxis.getter(i);
-    if (v < lo){ lo = v; iLo = i; }
-    if (v > hi){ hi = v; iHi = i; }
+    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+    const p = [px, py, pz];
+    arr[i*2]     = p[PRI] / tile;
+    arr[i*2 + 1] = p[SEC] / tile;
   }
-  const du = uv.getX(iHi) - uv.getX(iLo);
-  const dv = uv.getY(iHi) - uv.getY(iLo);
-  const longInV = Math.abs(dv) > Math.abs(du);
+  geom.setAttribute('uv', new THREE.BufferAttribute(arr, 2));
 
-  const repeats = Math.max(1, Math.round(longAxis.size / 0.7));
-  if (longInV){
-    // V varies most along the long axis → rotate texture 90° so the grain (image U)
-    // ends up along the long axis. After rotation we tile along U (which now sits over V).
-    t.rotation = Math.PI / 2;
-    t.repeat.set(repeats, 1);
-  } else {
-    // U already varies along the long axis — keep as-is, tile U.
-    t.rotation = 0;
-    t.repeat.set(repeats, 1);
-  }
-  return t;
+  // Use the shared texture as-is (no rotation, no per-mesh clone needed)
+  return baseTex;
 }
 
 async function loadAll(){
