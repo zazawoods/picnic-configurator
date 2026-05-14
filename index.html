@@ -322,6 +322,22 @@ function alignWoodToMesh(mesh, baseTex){
   return baseTex;
 }
 
+// Tell whether a mesh belongs to a "legs" subassembly (named Table_legs_* on the node
+// or on the parent group for multi-primitive cases).
+function isLegMesh(o){
+  const n1 = o.name || '';
+  const n2 = (o.parent && o.parent.name) || '';
+  return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2);
+}
+
+function makeBlackMetalMaterial(){
+  return new THREE.MeshStandardMaterial({
+    color: 0x0d0d0d,     // near-black powder coat
+    metalness: 0.55,     // matte metallic
+    roughness: 0.45,     // not glossy
+  });
+}
+
 async function loadAll(){
   const [tex, w, x] = await Promise.all([
     loadWoodTex(),
@@ -337,15 +353,19 @@ async function loadAll(){
       if (o.isMesh){
         o.castShadow = true;
         o.receiveShadow = true;
-        const tex = alignWoodToMesh(o, woodTex);
-        const m = new THREE.MeshStandardMaterial({
-          map: tex,
-          color: 0xffffff,
-          roughness: 0.78,
-          metalness: 0.0,
-        });
-        m.userData.isWood = true;
-        o.material = m;
+        if (isLegMesh(o)){
+          o.material = makeBlackMetalMaterial();
+        } else {
+          const tex = alignWoodToMesh(o, woodTex);
+          const m = new THREE.MeshStandardMaterial({
+            map: tex,
+            color: 0xffffff,
+            roughness: 0.78,
+            metalness: 0.0,
+          });
+          m.userData.isWood = true;
+          o.material = m;
+        }
       }
     });
     scene.add(root);
