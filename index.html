@@ -162,10 +162,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-// --- External asset URLs (served alongside this HTML) ---
-const URL_W    = 'angle.glb';
-const URL_X    = 'xset.glb';
-const URL_WOOD = 'wood.jpg';
+// --- Asset URLs. Binaries are served from GitHub raw to bypass any host limits.
+const CDN      = 'https://raw.githubusercontent.com/zazawoods/picnic-configurator/main';
+const URL_W    = CDN + '/angle.glb';
+const URL_X    = CDN + '/xset.glb';
+const URL_WOOD = CDN + '/wood.jpg';
 
 // --- Family configuration ---
 const FAMILIES = {
