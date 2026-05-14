@@ -1,4 +1,4 @@
-// Tiny static file server for Railway. Zero npm deps. With gzip + cache.
+// Tiny static file server for Railway. Zero npm deps. Streams files; gzip text only.
 const http = require('http');
 const fs   = require('fs');
 const zlib = require('zlib');
@@ -37,30 +37,33 @@ http.createServer((req, res) => {
   if (!target) { res.writeHead(400); res.end('bad path'); return; }
 
   fs.stat(target, (err, st) => {
-    if (err) { res.writeHead(404); res.end('not found'); return; }
+    if (err)            { res.writeHead(404); res.end('not found'); return; }
     if (st.isDirectory()) target = path.join(target, 'index.html');
-    fs.readFile(target, (err2, data) => {
-      if (err2) { res.writeHead(404); res.end('not found'); return; }
-      const ext = path.extname(target).toLowerCase();
-      const mime = MIME[ext] || 'application/octet-stream';
-      const headers = {
-        'Content-Type': mime,
-        'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
-        'X-Content-Type-Options': 'nosniff',
-      };
-      const acceptEnc = (req.headers['accept-encoding'] || '').toLowerCase();
-      if (COMPRESSIBLE.has(ext) && acceptEnc.includes('gzip')) {
-        zlib.gzip(data, (gerr, gz) => {
-          if (gerr) { res.writeHead(200, headers); res.end(data); return; }
-          headers['Content-Encoding'] = 'gzip';
-          res.writeHead(200, headers);
-          res.end(gz);
-        });
-      } else {
-        res.writeHead(200, headers);
-        res.end(data);
-      }
-    });
+
+    const ext  = path.extname(target).toLowerCase();
+    const mime = MIME[ext] || 'application/octet-stream';
+    const acceptEnc = (req.headers['accept-encoding'] || '').toLowerCase();
+    const useGzip   = COMPRESSIBLE.has(ext) && acceptEnc.includes('gzip');
+
+    const headers = {
+      'Content-Type': mime,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
+    };
+
+    const stream = fs.createReadStream(target);
+    stream.on('error', () => { try { res.writeHead(500); res.end('read err'); } catch(_){} });
+
+    if (useGzip) {
+      headers['Content-Encoding'] = 'gzip';
+      res.writeHead(200, headers);
+      stream.pipe(zlib.createGzip()).pipe(res);
+    } else {
+      headers['Content-Length'] = st.size;
+      res.writeHead(200, headers);
+      stream.pipe(res);
+    }
   });
 }).listen(port, () => {
   console.log(`Picnic configurator listening on :${port}`);
