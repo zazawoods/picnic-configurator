@@ -1,6 +1,7 @@
-// Tiny static file server for Railway. Zero npm deps.
+// Tiny static file server for Railway. Zero npm deps. With gzip + cache.
 const http = require('http');
 const fs   = require('fs');
+const zlib = require('zlib');
 const path = require('path');
 
 const port = process.env.PORT || 3000;
@@ -8,23 +9,20 @@ const root = __dirname;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
-  '.htm':  'text/html; charset=utf-8',
   '.js':   'application/javascript; charset=utf-8',
-  '.mjs':  'application/javascript; charset=utf-8',
   '.css':  'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
   '.svg':  'image/svg+xml',
   '.glb':  'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.ico':  'image/x-icon',
   '.wasm': 'application/wasm',
   '.txt':  'text/plain; charset=utf-8',
-  '.map':  'application/json; charset=utf-8',
 };
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.gltf']);
 
 function safeJoin(rel) {
   const decoded = decodeURIComponent(rel.split('?')[0]);
@@ -45,12 +43,23 @@ http.createServer((req, res) => {
       if (err2) { res.writeHead(404); res.end('not found'); return; }
       const ext = path.extname(target).toLowerCase();
       const mime = MIME[ext] || 'application/octet-stream';
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': mime,
         'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
         'X-Content-Type-Options': 'nosniff',
-      });
-      res.end(data);
+      };
+      const acceptEnc = (req.headers['accept-encoding'] || '').toLowerCase();
+      if (COMPRESSIBLE.has(ext) && acceptEnc.includes('gzip')) {
+        zlib.gzip(data, (gerr, gz) => {
+          if (gerr) { res.writeHead(200, headers); res.end(data); return; }
+          headers['Content-Encoding'] = 'gzip';
+          res.writeHead(200, headers);
+          res.end(gz);
+        });
+      } else {
+        res.writeHead(200, headers);
+        res.end(data);
+      }
     });
   });
 }).listen(port, () => {
