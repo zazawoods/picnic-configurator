@@ -65,13 +65,15 @@ http.createServer((req, res) => {
       'Content-Type': mime,
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'SAMEORIGIN',
+      // No X-Frame-Options (legacy); use CSP frame-ancestors instead, which supports a list.
       'Referrer-Policy': 'no-referrer-when-downgrade',
       'Permissions-Policy': 'interest-cohort=()',
       'Access-Control-Allow-Origin': '*',
-      // Defense-in-depth CSP. Allows the CDNs we actually use (unpkg, gstatic, raw.github).
+      // Defense-in-depth CSP. Allows the CDNs we actually use (unpkg, gstatic, raw.github),
+      // and lets the configurator be embedded as an iframe from the Shopify storefront,
+      // Shopify admin preview and the myshopify.com staging domains.
       'Content-Security-Policy': ext === '.html'
-        ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src 'self' https://unpkg.com https://www.gstatic.com https://raw.githubusercontent.com; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'"
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src 'self' https://unpkg.com https://www.gstatic.com https://raw.githubusercontent.com; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com https://zazawoods.de https://*.zazawoods.de https://zazawoods.com https://*.zazawoods.com; base-uri 'self'"
         : undefined,
     };
     // Drop undefined CSP for non-HTML
