@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D Configurator — Picnic Sets</title>
+<title data-i18n="page_title">Picnic Set Configurator</title>
 
-<!-- Asset hints: start network as early as possible -->
+<!-- Asset hints -->
 <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link rel="dns-prefetch"  href="https://www.gstatic.com">
@@ -14,13 +14,8 @@
 <link rel="preload" as="image" href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/wood.jpg" crossorigin>
 <style>
   :root{
-    --bg:#f3f1ec;
-    --bg2:#e9e5dd;
-    --ink:#1c1a16;
-    --muted:#6b6660;
-    --accent:#1c1a16;
-    --line:rgba(0,0,0,.08);
-    --card:#ffffff;
+    --bg:#f3f1ec; --bg2:#e9e5dd; --ink:#1c1a16; --muted:#6b6660;
+    --accent:#1c1a16; --line:rgba(0,0,0,.08); --card:#ffffff;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Inter,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -37,18 +32,12 @@
   .group{display:flex;flex-direction:column;gap:8px}
   .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:2px}
   .chips{display:flex;flex-wrap:wrap;gap:6px}
-  .chip{
-    padding:8px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;color:var(--ink);
-    transition:.12s ease;
-  }
+  .chip{padding:8px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;color:var(--ink);transition:.12s ease}
   .chip:hover{border-color:#bbb}
   .chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
   .chip[disabled]{opacity:.35;cursor:not-allowed}
   .frames{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-  .frame{
-    border:1px solid var(--line);border-radius:14px;padding:12px 8px;background:#fff;cursor:pointer;text-align:center;
-    transition:.15s ease;display:flex;flex-direction:column;align-items:center;gap:6px;
-  }
+  .frame{border:1px solid var(--line);border-radius:14px;padding:12px 8px;background:#fff;cursor:pointer;text-align:center;transition:.15s ease;display:flex;flex-direction:column;align-items:center;gap:6px}
   .frame:hover{border-color:#bbb}
   .frame.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .frame svg{width:72px;height:44px;display:block}
@@ -78,13 +67,25 @@
   .spin{width:18px;height:18px;border:2px solid #ccc;border-top-color:#222;border-radius:50%;animation:r .8s linear infinite;margin-right:10px}
   @keyframes r{to{transform:rotate(360deg)}}
   .small{font-size:11px;color:var(--muted)}
-  .toolbar{position:absolute;right:16px;top:16px;display:flex;gap:6px}
-  .tbtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;cursor:pointer;color:var(--ink)}
+  .toolbar{position:absolute;right:16px;top:16px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60%;justify-content:flex-end}
+  .tbtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
   .tbtn:hover{background:#fff}
+  .tbtn[hidden]{display:none}
+  .topleft{position:absolute;left:16px;top:16px;display:flex;gap:6px;z-index:2}
+  /* Language switcher */
+  .langs{display:inline-flex;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .langbtn{background:transparent;border:0;padding:6px 9px;font-size:12px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;gap:4px;letter-spacing:.04em;font-weight:500}
+  .langbtn:hover{background:rgba(0,0,0,.04);color:var(--ink)}
+  .langbtn.active{background:var(--accent);color:#fff}
+  .langbtn svg{width:14px;height:10px;display:block;border-radius:1px;box-shadow:0 0 0 0.5px rgba(0,0,0,.1)}
   @media (max-width:760px){
     #app{flex-direction:column}
-    #panel{width:100%;border-left:0;border-top:1px solid var(--line);max-height:55vh}
-    #stage{flex:1 1 45vh;min-height:45vh}
+    #panel{width:100%;border-left:0;border-top:1px solid var(--line);max-height:60vh}
+    #stage{flex:1 1 40vh;min-height:40vh}
+    .toolbar{top:8px;right:8px;gap:4px}
+    .topleft{top:8px;left:8px}
+    .langbtn{padding:5px 7px;font-size:11px}
+    .hud{display:none}
   }
 </style>
 </head>
@@ -92,24 +93,47 @@
 <div id="app">
   <div id="stage">
     <canvas id="c"></canvas>
+
+    <div class="topleft">
+      <button class="tbtn" id="exitBtn" hidden>
+        <span style="font-size:14px;line-height:1">←</span>
+        <span data-i18n="exit">Close</span>
+      </button>
+    </div>
+
     <div class="toolbar">
-      <button class="tbtn" id="resetView">Reset view</button>
-      <button class="tbtn" id="toggleShadow">Shadows</button>
+      <span class="langs" role="group" aria-label="Language">
+        <button class="langbtn" data-lang="de" title="Deutsch">
+          <svg viewBox="0 0 5 3" preserveAspectRatio="none"><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg>
+          DE
+        </button>
+        <button class="langbtn" data-lang="en" title="English">
+          <svg viewBox="0 0 60 30"><clipPath id="t"><path d="M0,0v30h60V0z"/></clipPath><clipPath id="s"><path d="M30,15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#t)"><path d="M0,0v30h60V0z" fill="#012169"/><path d="M0,0L60,30M60,0L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0L60,30M60,0L0,30" clip-path="url(#s)" stroke="#C8102E" stroke-width="4"/><path d="M30,0v30M0,15h60" stroke="#fff" stroke-width="10"/><path d="M30,0v30M0,15h60" stroke="#C8102E" stroke-width="6"/></g></svg>
+          EN
+        </button>
+        <button class="langbtn" data-lang="nl" title="Nederlands">
+          <svg viewBox="0 0 9 6" preserveAspectRatio="none"><rect width="9" height="2" y="0" fill="#AE1C28"/><rect width="9" height="2" y="2" fill="#fff"/><rect width="9" height="2" y="4" fill="#21468B"/></svg>
+          NL
+        </button>
+      </span>
+      <button class="tbtn" id="resetView"><span data-i18n="reset_view">Reset view</span></button>
+      <button class="tbtn" id="toggleShadow"><span data-i18n="shadows">Shadows</span></button>
     </div>
-    <div class="hud">
-      <kbd>LMB</kbd> rotate · <kbd>wheel</kbd> zoom · <kbd>RMB</kbd> pan
+
+    <div class="hud" id="hud">
+      <kbd data-i18n="hud_lmb">LMB</kbd> <span data-i18n="hud_rotate">rotate</span> · <kbd data-i18n="hud_wheel">wheel</kbd> <span data-i18n="hud_zoom">zoom</span> · <kbd data-i18n="hud_rmb">RMB</kbd> <span data-i18n="hud_pan">pan</span>
     </div>
-    <div class="loading" id="loading"><div class="spin"></div><span>Loading models…</span></div>
+    <div class="loading" id="loading"><div class="spin"></div><span data-i18n="loading">Loading models…</span></div>
   </div>
 
   <aside id="panel">
     <div>
-      <h1>Picnic Set Configurator</h1>
-      <div class="sub">Table + benches. Assembly fits the selected length.</div>
+      <h1 data-i18n="title">Picnic Set Configurator</h1>
+      <div class="sub" data-i18n="subtitle">Table + benches. Assembly fits the selected length.</div>
     </div>
 
     <div class="group">
-      <div class="lbl">Frame</div>
+      <div class="lbl" data-i18n="frame">Frame</div>
       <div class="frames" id="frames">
         <button class="frame active" data-fam="W">
           <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
@@ -125,42 +149,42 @@
     </div>
 
     <div class="group">
-      <div class="lbl">Length, cm</div>
+      <div class="lbl" data-i18n="length_cm">Length, cm</div>
       <div class="chips" id="lengths"></div>
     </div>
 
     <div class="group">
-      <div class="lbl">Options</div>
+      <div class="lbl" data-i18n="options">Options</div>
       <label class="row">
-        <span>Backrest</span>
+        <span data-i18n="backrest">Backrest</span>
         <span class="switch"><input type="checkbox" id="backOn" checked><span class="slider"></span></span>
       </label>
     </div>
 
     <div class="group">
-      <div class="lbl">Wood tone</div>
+      <div class="lbl" data-i18n="wood_tone">Wood tone</div>
       <div class="stones" id="stains">
-        <div class="swatch active" data-tint="ffffff" title="Natural" style="background:#d9b486"></div>
-        <div class="swatch" data-tint="b88b5e" title="Oak"     style="background:#a87142"></div>
-        <div class="swatch" data-tint="7d4f2e" title="Walnut"  style="background:#6b4324"></div>
-        <div class="swatch" data-tint="3b2a1e" title="Smoked"  style="background:#2a1c12"></div>
+        <div class="swatch active" data-tint="ffffff" data-i18n-title="natural" title="Natural" style="background:#d9b486"></div>
+        <div class="swatch" data-tint="b88b5e" data-i18n-title="oak"     title="Oak"     style="background:#a87142"></div>
+        <div class="swatch" data-tint="7d4f2e" data-i18n-title="walnut"  title="Walnut"  style="background:#6b4324"></div>
+        <div class="swatch" data-tint="3b2a1e" data-i18n-title="smoked"  title="Smoked"  style="background:#2a1c12"></div>
       </div>
     </div>
 
     <div class="group">
-      <div class="lbl">Leg color</div>
+      <div class="lbl" data-i18n="leg_color">Leg color</div>
       <div class="stones" id="legColors">
-        <div class="swatch active" data-leg="0d0d0d" title="Black (RAL 9005)"      style="background:#0d0d0d"></div>
-        <div class="swatch"        data-leg="2c2f31" title="Anthracite (RAL 7016)" style="background:#2c2f31"></div>
-        <div class="swatch"        data-leg="9aa0a4" title="Light grey (RAL 7035)" style="background:#9aa0a4"></div>
-        <div class="swatch"        data-leg="ebe8e0" title="White (RAL 9010)"      style="background:#ebe8e0"></div>
+        <div class="swatch active" data-leg="0d0d0d" data-i18n-title="black"        title="Black"        style="background:#0d0d0d"></div>
+        <div class="swatch"        data-leg="2c2f31" data-i18n-title="anthracite"   title="Anthracite"   style="background:#2c2f31"></div>
+        <div class="swatch"        data-leg="9aa0a4" data-i18n-title="light_grey"   title="Light grey"   style="background:#9aa0a4"></div>
+        <div class="swatch"        data-leg="ebe8e0" data-i18n-title="white"        title="White"        style="background:#ebe8e0"></div>
       </div>
     </div>
 
     <div class="summary" id="summary"></div>
 
-    <button class="btn" id="addBtn">Add to cart</button>
-    <div class="small" style="text-align:center">Prototype. Geometry and textures sourced from your GLB files.</div>
+    <button class="btn" id="addBtn" data-i18n="add_to_cart">Add to cart</button>
+    <div class="small" style="text-align:center" data-i18n="footnote">Prototype. Geometry and textures sourced from your GLB files.</div>
   </aside>
 </div>
 
@@ -180,13 +204,148 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-// --- Asset URLs. Binaries are served from GitHub raw to bypass any host limits.
+// === i18n ===
+const I18N = {
+  de: {
+    page_title: 'Picknick-Set Konfigurator',
+    title: 'Picknick-Set Konfigurator',
+    subtitle: 'Tisch + Bänke. Die Montage passt zur gewählten Länge.',
+    exit: 'Schließen',
+    reset_view: 'Ansicht zurücksetzen',
+    shadows: 'Schatten',
+    hud_lmb: 'LMT', hud_rotate: 'drehen', hud_wheel: 'Rad', hud_zoom: 'zoom', hud_rmb: 'RMT', hud_pan: 'verschieben',
+    loading: 'Modelle werden geladen…',
+    frame: 'Gestell',
+    length_cm: 'Länge, cm',
+    options: 'Optionen',
+    backrest: 'Rückenlehne',
+    wood_tone: 'Holzfarbe',
+    natural: 'Natur', oak: 'Eiche', walnut: 'Nussbaum', smoked: 'Geräuchert',
+    leg_color: 'Gestellfarbe',
+    black: 'Schwarz (RAL 9005)', anthracite: 'Anthrazit (RAL 7016)', light_grey: 'Hellgrau (RAL 7035)', white: 'Weiß (RAL 9010)',
+    sum_frame: 'Gestell', sum_length: 'Länge', sum_tabletop: 'Tischplatte', sum_height: 'Höhe', sum_included: 'Enthält',
+    part_tabletop: 'Tischplatte', part_legs: 'Gestell', part_benches: 'Bänke', part_backrest: 'Rückenlehne',
+    add_to_cart: 'In den Warenkorb',
+    footnote: 'Geometrie und Texturen aus den eigenen GLB-Dateien.',
+    failed_load: 'Modelle konnten nicht geladen werden. Siehe Konsole.',
+    alert_added: 'Konfiguration übernommen:',
+    alert_copied: 'Konfigurations-Link kopiert.'
+  },
+  en: {
+    page_title: 'Picnic Set Configurator',
+    title: 'Picnic Set Configurator',
+    subtitle: 'Table + benches. Assembly fits the selected length.',
+    exit: 'Close',
+    reset_view: 'Reset view',
+    shadows: 'Shadows',
+    hud_lmb: 'LMB', hud_rotate: 'rotate', hud_wheel: 'wheel', hud_zoom: 'zoom', hud_rmb: 'RMB', hud_pan: 'pan',
+    loading: 'Loading models…',
+    frame: 'Frame',
+    length_cm: 'Length, cm',
+    options: 'Options',
+    backrest: 'Backrest',
+    wood_tone: 'Wood tone',
+    natural: 'Natural', oak: 'Oak', walnut: 'Walnut', smoked: 'Smoked',
+    leg_color: 'Leg color',
+    black: 'Black (RAL 9005)', anthracite: 'Anthracite (RAL 7016)', light_grey: 'Light grey (RAL 7035)', white: 'White (RAL 9010)',
+    sum_frame: 'Frame', sum_length: 'Length', sum_tabletop: 'Tabletop', sum_height: 'Height', sum_included: 'Included',
+    part_tabletop: 'Tabletop', part_legs: 'Legs', part_benches: 'Benches', part_backrest: 'Backrest',
+    add_to_cart: 'Add to cart',
+    footnote: 'Geometry and textures sourced from the GLB files.',
+    failed_load: 'Failed to load models. See console.',
+    alert_added: 'Configuration applied:',
+    alert_copied: 'Configuration link copied.'
+  },
+  nl: {
+    page_title: 'Picknickset Configurator',
+    title: 'Picknickset Configurator',
+    subtitle: 'Tafel + banken. De montage past bij de gekozen lengte.',
+    exit: 'Sluiten',
+    reset_view: 'Beeld resetten',
+    shadows: 'Schaduwen',
+    hud_lmb: 'LMK', hud_rotate: 'draaien', hud_wheel: 'scroll', hud_zoom: 'zoom', hud_rmb: 'RMK', hud_pan: 'pannen',
+    loading: 'Modellen laden…',
+    frame: 'Frame',
+    length_cm: 'Lengte, cm',
+    options: 'Opties',
+    backrest: 'Rugleuning',
+    wood_tone: 'Houtkleur',
+    natural: 'Naturel', oak: 'Eiken', walnut: 'Notenhout', smoked: 'Gerookt',
+    leg_color: 'Framekleur',
+    black: 'Zwart (RAL 9005)', anthracite: 'Antraciet (RAL 7016)', light_grey: 'Lichtgrijs (RAL 7035)', white: 'Wit (RAL 9010)',
+    sum_frame: 'Frame', sum_length: 'Lengte', sum_tabletop: 'Tafelblad', sum_height: 'Hoogte', sum_included: 'Inhoud',
+    part_tabletop: 'Tafelblad', part_legs: 'Frame', part_benches: 'Banken', part_backrest: 'Rugleuning',
+    add_to_cart: 'In winkelmandje',
+    footnote: 'Geometrie en texturen uit de GLB-bestanden.',
+    failed_load: 'Modellen konden niet worden geladen. Zie console.',
+    alert_added: 'Configuratie toegepast:',
+    alert_copied: 'Configuratielink gekopieerd.'
+  }
+};
+
+function detectLang(){
+  const q = new URLSearchParams(location.search).get('lang');
+  if (q && I18N[q]) return q;
+  try {
+    const ls = localStorage.getItem('picnic.lang');
+    if (ls && I18N[ls]) return ls;
+  } catch(_){}
+  const nav = (navigator.language || 'en').slice(0,2).toLowerCase();
+  if (I18N[nav]) return nav;
+  return 'en';
+}
+
+let currentLang = detectLang();
+
+function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key]) || key; }
+
+function applyLang(code){
+  if (!I18N[code]) code = 'en';
+  currentLang = code;
+  try { localStorage.setItem('picnic.lang', code); } catch(_){}
+  document.documentElement.lang = code;
+  // text
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  // titles
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+  });
+  // active flag button
+  document.querySelectorAll('.langbtn').forEach(b => b.classList.toggle('active', b.dataset.lang === code));
+  // re-render summary (dynamic content)
+  if (window.__updateSummary) window.__updateSummary();
+}
+
+// === Exit / return navigation ===
+const QS = new URLSearchParams(location.search);
+const backUrl = QS.get('back') || QS.get('return') || document.referrer || '';
+if (backUrl){
+  const btn = document.getElementById('exitBtn');
+  btn.hidden = false;
+  btn.addEventListener('click', () => {
+    // If running inside an iframe with a parent, ask parent to close/navigate.
+    if (window.parent && window.parent !== window){
+      try {
+        window.parent.postMessage({ source:'picnic-configurator', type:'exit', back: backUrl }, '*');
+      } catch(_){}
+    }
+    // Fallback: direct navigation in the same window
+    try {
+      if (/^https?:\/\//.test(backUrl)) location.href = backUrl;
+      else if (backUrl.startsWith('/')) location.href = backUrl;
+    } catch(_){}
+  });
+}
+
+// === Embedded GLB / wood URLs (served from GitHub raw to bypass any host limits) ===
 const CDN      = 'https://raw.githubusercontent.com/zazawoods/picnic-configurator/main';
 const URL_W    = CDN + '/angle.glb';
 const URL_X    = CDN + '/xset.glb';
 const URL_WOOD = CDN + '/wood.jpg';
 
-// --- Family configuration ---
+// === Family configuration ===
 const FAMILIES = {
   W: { lengths: [160,200,250,300,350,400],
        label: 'Angle (W)',
@@ -210,7 +369,7 @@ const FAMILIES = {
        })},
 };
 
-// --- Three.js setup ---
+// === Three.js setup ===
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -255,25 +414,15 @@ sun.shadow.normalBias = 0.02;
 scene.add(sun);
 scene.add(sun.target);
 
-const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(8, 64),
-  new THREE.ShadowMaterial({ opacity: 0.28 })
-);
-ground.rotation.x = -Math.PI/2;
-ground.position.y = 0;
-ground.receiveShadow = true;
+const ground = new THREE.Mesh(new THREE.CircleGeometry(8, 64), new THREE.ShadowMaterial({ opacity: 0.28 }));
+ground.rotation.x = -Math.PI/2; ground.position.y = 0; ground.receiveShadow = true;
 scene.add(ground);
 
-const floorTint = new THREE.Mesh(
-  new THREE.CircleGeometry(8, 64),
-  new THREE.MeshStandardMaterial({ color:0xe9e5dd, roughness:1.0, metalness:0.0 })
-);
-floorTint.rotation.x = -Math.PI/2;
-floorTint.position.y = -0.001;
-floorTint.receiveShadow = true;
+const floorTint = new THREE.Mesh(new THREE.CircleGeometry(8, 64), new THREE.MeshStandardMaterial({ color:0xe9e5dd, roughness:1.0, metalness:0.0 }));
+floorTint.rotation.x = -Math.PI/2; floorTint.position.y = -0.001; floorTint.receiveShadow = true;
 scene.add(floorTint);
 
-// --- Loading ---
+// === Loading ===
 const draco = new DRACOLoader();
 draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
 draco.setDecoderConfig({ type: 'js' });
@@ -288,11 +437,12 @@ let currentLength = 250;
 let backOn = true;
 let tintHex = 0xffffff;
 let legHex  = 0x0d0d0d;
+// Track current swatch labels for cart properties
+let tintKey = 'natural';
+let legKey  = 'black';
 
 function loadGLB(url){
-  return new Promise((res, rej) => {
-    loader.load(url, g => res(g.scene), undefined, rej);
-  });
+  return new Promise((res, rej) => { loader.load(url, g => res(g.scene), undefined, rej); });
 }
 
 function loadWoodTex(){
@@ -300,26 +450,21 @@ function loadWoodTex(){
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const t = new THREE.Texture(img);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      t.needsUpdate = true;
-      res(t);
+      const tex = new THREE.Texture(img);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      tex.needsUpdate = true;
+      res(tex);
     };
     img.onerror = rej;
     img.src = URL_WOOD;
   });
 }
 
-// In this dataset Z is the LENGTH axis for every wood part (table top, bench planks,
-// backrests). Earlier auto-detection failed for short lengths because the bbox X
-// (which spans both benches/backrests on either side of the table) is wider than the
-// actual table length when length < 200 cm. So we hardcode the grain axis to Z.
 function alignWoodToMesh(mesh, baseTex){
   const geom = mesh.geometry;
-  const PRI = 2; // Z — grain direction (along the length of the wood)
-  const SEC = 0; // X — across the plank
+  const PRI = 2, SEC = 0;
   const tile = 0.7;
   const pos = geom.attributes.position;
   const arr = new Float32Array(pos.count * 2);
@@ -332,27 +477,19 @@ function alignWoodToMesh(mesh, baseTex){
   return baseTex;
 }
 
-// Procedural normal map for powder-coated metal — subtle "orange peel" microsurface.
 function makeMetalNormalMap(){
   const size = 256;
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
+  const c = document.createElement('canvas'); c.width = c.height = size;
   const ctx = c.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const d = img.data;
-  // Generate slight 2D noise → encode as RG, keep B=255 (z-up flat-ish normal)
+  const img = ctx.createImageData(size, size); const d = img.data;
   for (let y = 0; y < size; y++){
     for (let x = 0; x < size; x++){
       const i = (y*size + x) * 4;
-      // Mix two noise frequencies for a more natural feel
-      const n1x = (Math.random()-0.5);
-      const n1y = (Math.random()-0.5);
-      const nx = n1x * 0.18;
-      const ny = n1y * 0.18;
-      d[i  ] = Math.max(0, Math.min(255, Math.round((nx*0.5 + 0.5) * 255)));
-      d[i+1] = Math.max(0, Math.min(255, Math.round((ny*0.5 + 0.5) * 255)));
-      d[i+2] = 255;
-      d[i+3] = 255;
+      const nx = (Math.random()-0.5) * 0.18;
+      const ny = (Math.random()-0.5) * 0.18;
+      d[i  ] = Math.round((nx*0.5 + 0.5) * 255);
+      d[i+1] = Math.round((ny*0.5 + 0.5) * 255);
+      d[i+2] = 255; d[i+3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -363,8 +500,6 @@ function makeMetalNormalMap(){
   return tex;
 }
 
-// Tell whether a mesh belongs to a "legs" subassembly (named Table_legs_* on the node
-// or on the parent group for multi-primitive cases).
 function isLegMesh(o){
   const n1 = o.name || '';
   const n2 = (o.parent && o.parent.name) || '';
@@ -373,10 +508,8 @@ function isLegMesh(o){
 
 function makeMetalMaterial(){
   const m = new THREE.MeshStandardMaterial({
-    color: legHex,                // dynamic via applyLegColor
-    metalness: 0.55,              // matte metallic
-    roughness: 0.45,              // not glossy
-    normalMap: metalNormalTex,    // powder-coat micro surface
+    color: legHex, metalness: 0.55, roughness: 0.45,
+    normalMap: metalNormalTex,
     normalScale: new THREE.Vector2(0.28, 0.28),
   });
   m.userData.isMetal = true;
@@ -385,11 +518,7 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  const [tex, w, x] = await Promise.all([
-    loadWoodTex(),
-    loadGLB(URL_W),
-    loadGLB(URL_X),
-  ]);
+  const [tex, w, x] = await Promise.all([loadWoodTex(), loadGLB(URL_W), loadGLB(URL_X)]);
   woodTex = tex;
   models.W = w; models.X = x;
   for (const k of Object.keys(models)){
@@ -397,41 +526,21 @@ async function loadAll(){
     root.visible = false;
     root.traverse(o => {
       if (o.isMesh){
-        o.castShadow = true;
-        o.receiveShadow = true;
+        o.castShadow = true; o.receiveShadow = true;
         if (isLegMesh(o)){
           o.material = makeMetalMaterial();
         } else {
           const tex = alignWoodToMesh(o, woodTex);
-          const m = new THREE.MeshStandardMaterial({
-            map: tex,
-            color: 0xffffff,
-            roughness: 0.78,
-            metalness: 0.0,
-          });
-          m.userData.isWood = true;
-          o.material = m;
+          const m = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.78, metalness: 0.0 });
+          m.userData.isWood = true; o.material = m;
         }
       }
     });
     scene.add(root);
   }
-  applyTint(tintHex);
-  applyLegColor(legHex);
+  applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
-}
-
-function applyLegColor(hex){
-  const c = new THREE.Color(hex);
-  for (const k of Object.keys(models)){
-    if (!models[k]) continue;
-    models[k].traverse(o => {
-      if (o.isMesh && o.material && o.material.userData.isMetal){
-        o.material.color.copy(c);
-      }
-    });
-  }
 }
 
 function applyTint(hex){
@@ -439,16 +548,21 @@ function applyTint(hex){
   for (const k of Object.keys(models)){
     if (!models[k]) continue;
     models[k].traverse(o => {
-      if (o.isMesh && o.material && o.material.userData.isWood){
-        o.material.color.copy(c);
-      }
+      if (o.isMesh && o.material && o.material.userData.isWood) o.material.color.copy(c);
     });
   }
 }
 
-// --- Selection logic ---
-// Toggle visibility on the named gltf node (Mesh for single-prim, Group for multi-prim).
-// Benches are mandatory (no toggle). Backrest is the only optional component.
+function applyLegColor(hex){
+  const c = new THREE.Color(hex);
+  for (const k of Object.keys(models)){
+    if (!models[k]) continue;
+    models[k].traverse(o => {
+      if (o.isMesh && o.material && o.material.userData.isMetal) o.material.color.copy(c);
+    });
+  }
+}
+
 function applyVisibility(){
   const fam = FAMILIES[currentFamily];
   const root = models[currentFamily];
@@ -462,11 +576,10 @@ function applyVisibility(){
       if (!o.name) return;
       const r = fam.match(o.name, L);
       if (!(r.top || r.legs || r.bench || r.backrest)) return;
-      if (L !== currentLength){
-        o.visible = false;
-      } else {
+      if (L !== currentLength) o.visible = false;
+      else {
         if (r.top || r.legs || r.bench) o.visible = true;
-        else if (r.backrest)            o.visible = backOn;
+        else if (r.backrest) o.visible = backOn;
       }
     });
   }
@@ -478,19 +591,13 @@ function frameCameraToSelection(){
   const root = models[currentFamily];
   if (!root) return;
   root.updateMatrixWorld(true);
-  function ancestorsVisible(obj){
-    let x = obj;
-    while (x){ if (x.visible === false) return false; x = x.parent; }
-    return true;
-  }
+  function ancestorsVisible(obj){ let x=obj; while(x){if(x.visible===false)return false;x=x.parent;} return true; }
   const box = new THREE.Box3();
   let any = false;
   root.traverse(o => {
     if (o.isMesh && ancestorsVisible(o)){
       const b = new THREE.Box3().setFromObject(o);
-      if (isFinite(b.min.x) && isFinite(b.max.x)){
-        box.union(b); any = true;
-      }
+      if (isFinite(b.min.x) && isFinite(b.max.x)){ box.union(b); any = true; }
     }
   });
   if (!any) return;
@@ -510,21 +617,20 @@ function frameCameraToSelection(){
 
 function updateSummary(){
   const fam = FAMILIES[currentFamily];
-  const components = ['Tabletop', 'Legs', 'Benches'];
-  if (backOn) components.push('Backrest');
+  const parts = [t('part_tabletop'), t('part_legs'), t('part_benches')];
+  if (backOn) parts.push(t('part_backrest'));
   document.getElementById('summary').innerHTML = `
-    <div class="dim"><span>Frame</span><b>${fam.label}</b></div>
-    <div class="dim"><span>Length</span><b>${currentLength} cm</b></div>
-    <div class="dim"><span>Tabletop</span><b>${fam.tabletop}</b></div>
-    <div class="dim"><span>Height</span><b>${fam.height}</b></div>
-    <div class="dim"><span>Included</span><b>${components.join(', ')}</b></div>
+    <div class="dim"><span>${t('sum_frame')}</span><b>${fam.label}</b></div>
+    <div class="dim"><span>${t('sum_length')}</span><b>${currentLength} cm</b></div>
+    <div class="dim"><span>${t('sum_tabletop')}</span><b>${fam.tabletop}</b></div>
+    <div class="dim"><span>${t('sum_height')}</span><b>${fam.height}</b></div>
+    <div class="dim"><span>${t('sum_included')}</span><b>${parts.join(', ')}</b></div>
   `;
 }
+window.__updateSummary = updateSummary;
 
-// --- UI ---
 function renderLengths(){
-  const wrap = document.getElementById('lengths');
-  wrap.innerHTML = '';
+  const wrap = document.getElementById('lengths'); wrap.innerHTML = '';
   const fam = FAMILIES[currentFamily];
   fam.lengths.forEach(L => {
     const b = document.createElement('button');
@@ -559,36 +665,87 @@ document.getElementById('toggleShadow').addEventListener('click', () => {
   sun.castShadow = shadowsOn;
   ground.visible = shadowsOn;
 });
-// Wood-tone swatches
+
 document.querySelectorAll('#stains .swatch').forEach(el => el.addEventListener('click', () => {
   document.querySelectorAll('#stains .swatch').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   tintHex = parseInt(el.dataset.tint, 16);
+  tintKey = el.getAttribute('data-i18n-title') || 'natural';
   applyTint(tintHex);
 }));
-
-// Leg-color swatches
 document.querySelectorAll('#legColors .swatch').forEach(el => el.addEventListener('click', () => {
   document.querySelectorAll('#legColors .swatch').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   legHex = parseInt(el.dataset.leg, 16);
+  legKey = el.getAttribute('data-i18n-title') || 'black';
   applyLegColor(legHex);
 }));
+
+// Language buttons
+document.querySelectorAll('.langbtn').forEach(b => b.addEventListener('click', () => applyLang(b.dataset.lang)));
+
+// === Add to cart — sends config to parent (Shopify storefront) via postMessage ===
+function getConfig(){
+  return {
+    family: currentFamily,
+    family_label: FAMILIES[currentFamily].label,
+    length_cm: currentLength,
+    backrest: backOn,
+    wood_tone: t(tintKey),
+    wood_tone_key: tintKey,
+    leg_color: t(legKey),
+    leg_color_key: legKey,
+    tabletop: FAMILIES[currentFamily].tabletop,
+    height:   FAMILIES[currentFamily].height,
+    lang: currentLang,
+  };
+}
+
 document.getElementById('addBtn').addEventListener('click', () => {
-  const url = new URL(location.href);
-  url.searchParams.set('family', currentFamily);
-  url.searchParams.set('length', currentLength);
-  url.searchParams.set('back', backOn?1:0);
-  navigator.clipboard?.writeText(url.toString()).catch(()=>{});
-  alert(`Configuration: ${currentFamily} ${currentLength} cm\nBackrest: ${backOn?'yes':'no'}\n\nShareable link copied to clipboard.`);
+  const cfg = getConfig();
+  // 1) Tell the parent storefront — it will handle /cart/add.js with line item properties
+  let sentToParent = false;
+  if (window.parent && window.parent !== window){
+    try {
+      window.parent.postMessage({ source:'picnic-configurator', type:'add-to-cart', config: cfg }, '*');
+      sentToParent = true;
+    } catch(_){}
+  }
+  // 2) Also copy a shareable link with the config encoded in the URL
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('family', cfg.family);
+    url.searchParams.set('length', cfg.length_cm);
+    url.searchParams.set('back', cfg.backrest?1:0);
+    url.searchParams.set('wood', cfg.wood_tone_key);
+    url.searchParams.set('leg',  cfg.leg_color_key);
+    url.searchParams.set('lang', cfg.lang);
+    navigator.clipboard?.writeText(url.toString()).catch(()=>{});
+  } catch(_){}
+  // 3) Visual feedback (only when no parent listener available)
+  if (!sentToParent){
+    alert(`${t('alert_added')}\n${cfg.family_label} ${cfg.length_cm} cm\n${t('backrest')}: ${cfg.backrest?'✓':'✗'}\n${t('wood_tone')}: ${cfg.wood_tone}\n${t('leg_color')}: ${cfg.leg_color}\n\n${t('alert_copied')}`);
+  }
 });
 
-// Initial query string
-const q = new URLSearchParams(location.search);
-if (q.has('family') && FAMILIES[q.get('family')]) currentFamily = q.get('family');
-if (q.has('length')) currentLength = parseInt(q.get('length'),10) || currentLength;
-if (q.has('back'))   backOn = q.get('back')==='1';
+// === Initial query string apply ===
+if (QS.has('family') && FAMILIES[QS.get('family')]) currentFamily = QS.get('family');
+if (QS.has('length')) currentLength = parseInt(QS.get('length'),10) || currentLength;
+if (QS.has('back'))   backOn = QS.get('back')==='1';
 document.getElementById('backOn').checked = backOn;
+if (QS.has('wood')){
+  const k = QS.get('wood');
+  const el = document.querySelector(`#stains .swatch[data-i18n-title="${k}"]`);
+  if (el){ el.click(); }
+}
+if (QS.has('leg')){
+  const k = QS.get('leg');
+  const el = document.querySelector(`#legColors .swatch[data-i18n-title="${k}"]`);
+  if (el){ el.click(); }
+}
+
+// Apply language (now that DOM listeners are bound)
+applyLang(currentLang);
 
 function resize(){
   const r = canvas.parentElement.getBoundingClientRect();
@@ -608,7 +765,7 @@ animate();
 
 loadAll().catch(err => {
   console.error(err);
-  document.getElementById('loading').innerHTML = '<span style="color:#a00">Failed to load models. See console.</span>';
+  document.getElementById('loading').innerHTML = '<span style="color:#a00">' + t('failed_load') + '</span>';
 });
 </script>
 </body>
