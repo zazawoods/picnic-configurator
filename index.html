@@ -67,15 +67,24 @@
   .btn:hover{opacity:.9}
   .hud{position:absolute;left:16px;bottom:16px;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);padding:10px 14px;border-radius:12px;font-size:12px;color:var(--muted);border:1px solid var(--line)}
   .hud kbd{background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--ink)}
-  .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(243,241,236,.85);z-index:20;font-size:14px;color:var(--muted)}
+  .loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(243,241,236,.92);z-index:20;font-size:14px;color:var(--muted);gap:14px}
   .loading.hidden{display:none}
-  .spin{width:18px;height:18px;border:2px solid #ccc;border-top-color:#222;border-radius:50%;animation:r .8s linear infinite;margin-right:10px}
-  @keyframes r{to{transform:rotate(360deg)}}
+  .loading .icon{width:64px;height:64px;display:block}
+  .loading .icon path{stroke:var(--ink);stroke-width:2;fill:none}
+  .loading .pulse{transform-origin:center;animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+  .loading .label{font-size:14px;color:var(--ink);letter-spacing:.02em}
+  .loading .bar{width:180px;height:3px;background:rgba(0,0,0,.08);border-radius:999px;overflow:hidden}
+  .loading .bar > div{height:100%;background:var(--accent);width:0;transition:width .25s ease}
+  .loading .pct{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
   .small{font-size:11px;color:var(--muted)}
   .toolbar{position:absolute;right:16px;top:16px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60%;justify-content:flex-end}
   .tbtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
   .tbtn:hover{background:#fff}
   .tbtn[hidden]{display:none}
+  .toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);background:rgba(28,26,22,.92);color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;backdrop-filter:blur(8px);z-index:30;transition:opacity .3s ease,transform .3s ease;opacity:0;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+  .toast[hidden]{display:none}
   .topleft{position:absolute;left:16px;top:16px;display:flex;gap:6px;z-index:2}
   /* Language switcher */
   .langs{display:inline-flex;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -123,12 +132,22 @@
       </span>
       <button class="tbtn" id="resetView"><span data-i18n="reset_view">Reset view</span></button>
       <button class="tbtn" id="toggleShadow"><span data-i18n="shadows">Shadows</span></button>
+      <button class="tbtn" id="shareBtn" title="Share">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span data-i18n="share">Teilen</span>
+      </button>
     </div>
+    <div class="toast" id="toast" hidden></div>
 
     <div class="hud" id="hud">
       <kbd data-i18n="hud_lmb">LMB</kbd> <span data-i18n="hud_rotate">rotate</span> · <kbd data-i18n="hud_wheel">wheel</kbd> <span data-i18n="hud_zoom">zoom</span> · <kbd data-i18n="hud_rmb">RMB</kbd> <span data-i18n="hud_pan">pan</span>
     </div>
-    <div class="loading" id="loading"><div class="spin"></div><span data-i18n="loading">Loading models…</span></div>
+    <div class="loading" id="loading">
+      <svg class="icon pulse" viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
+      <span class="label" data-i18n="loading">Modelle werden geladen…</span>
+      <div class="bar"><div id="loadBar"></div></div>
+      <span class="pct" id="loadPct">0 %</span>
+    </div>
   </div>
 
   <aside id="panel">
@@ -241,6 +260,8 @@ const I18N = {
     bench_count: 'Anzahl der Bänke',
     benches_0: 'Keine Sitzbank', benches_1: '1 Sitzbank', benches_2: '2 Sitzbänke',
     price: 'Preis',
+    share: 'Teilen',
+    share_copied: 'Link kopiert',
     wood_tone: 'Holzfarbe',
     natural: 'Natur', oak: 'Eiche', walnut: 'Nussbaum', smoked: 'Geräuchert',
     leg_color: 'Gestellfarbe',
@@ -269,6 +290,8 @@ const I18N = {
     bench_count: 'Number of benches',
     benches_0: 'No bench', benches_1: '1 bench', benches_2: '2 benches',
     price: 'Price',
+    share: 'Share',
+    share_copied: 'Link copied',
     wood_tone: 'Wood tone',
     natural: 'Natural', oak: 'Oak', walnut: 'Walnut', smoked: 'Smoked',
     leg_color: 'Leg color',
@@ -297,6 +320,8 @@ const I18N = {
     bench_count: 'Aantal banken',
     benches_0: 'Geen bank', benches_1: '1 bank', benches_2: '2 banken',
     price: 'Prijs',
+    share: 'Delen',
+    share_copied: 'Link gekopieerd',
     wood_tone: 'Houtkleur',
     natural: 'Naturel', oak: 'Eiken', walnut: 'Notenhout', smoked: 'Gerookt',
     leg_color: 'Framekleur',
@@ -438,6 +463,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.localClippingEnabled = true; // for "1 bench" view
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
@@ -506,8 +532,32 @@ let legHex  = 0x0d0d0d;
 let tintKey = 'natural';
 let legKey  = 'black';
 
-function loadGLB(url){
-  return new Promise((res, rej) => { loader.load(url, g => res(g.scene), undefined, rej); });
+// === Loading progress ===
+// Each major asset contributes to the global progress %.
+// We use rough weights so the bar moves smoothly (xset.glb is ~4.5MB so the
+// biggest chunk).
+const LOAD_WEIGHTS = { 'angle': 22, 'xset': 70, 'wood': 8 };
+const loadState = { angle:0, xset:0, wood:0 };
+function setLoadProgress(key, fraction){
+  loadState[key] = Math.max(0, Math.min(1, fraction || 0));
+  let total = 0, full = 0;
+  for (const k of Object.keys(LOAD_WEIGHTS)){
+    total += LOAD_WEIGHTS[k];
+    full += LOAD_WEIGHTS[k] * (loadState[k] || 0);
+  }
+  const pct = Math.round((full/total) * 100);
+  const bar = document.getElementById('loadBar');
+  const out = document.getElementById('loadPct');
+  if (bar) bar.style.width = pct + '%';
+  if (out) out.textContent = pct + ' %';
+}
+
+function loadGLB(url, key){
+  return new Promise((res, rej) => {
+    loader.load(url, g => { setLoadProgress(key, 1); res(g.scene); }, ev => {
+      if (ev && ev.lengthComputable && ev.total) setLoadProgress(key, ev.loaded / ev.total);
+    }, rej);
+  });
 }
 
 function loadWoodTex(){
@@ -515,6 +565,7 @@ function loadWoodTex(){
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      setLoadProgress('wood', 1);
       const tex = new THREE.Texture(img);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -524,6 +575,8 @@ function loadWoodTex(){
     };
     img.onerror = rej;
     img.src = URL_WOOD;
+    // Image events don't fire progress reliably — show 50% on initial decode
+    setLoadProgress('wood', 0.4);
   });
 }
 
@@ -637,7 +690,7 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  const [tex, w, x] = await Promise.all([loadWoodTex(), loadGLB(URL_W), loadGLB(URL_X)]);
+  const [tex, w, x] = await Promise.all([loadWoodTex(), loadGLB(URL_W, 'angle'), loadGLB(URL_X, 'xset')]);
   woodTex = tex;
   models.W = w; models.X = x;
   for (const k of Object.keys(models)){
@@ -737,6 +790,17 @@ function applyVisibility(){
   const shouldShowBench = (fam.hasBenchChoice ? benchCount > 0 : true);
   const shouldShowBack  = (fam.hasBackrest ? backOn : false);
 
+  // For "1 Sitzbank" we clip the bench mesh at x = 0 so only one side is shown.
+  // The bench geometry is symmetric across x; clipping a half gives a clean look.
+  const benchClipPlanes = (fam.hasBenchChoice && benchCount === 1)
+    ? [ new THREE.Plane(new THREE.Vector3(1, 0, 0), 0) ] // keep x > 0 side
+    : null;
+  // Backrest follows the same logic (only relevant for W which has fixed backrest,
+  // but apply for safety).
+  const backClipPlanes = (fam.hasBenchChoice && benchCount === 1)
+    ? [ new THREE.Plane(new THREE.Vector3(1, 0, 0), 0) ]
+    : null;
+
   root.traverse(o => {
     if (!o.name) return;
     const r = fam.match(o.name, renderL);
@@ -746,15 +810,30 @@ function applyVisibility(){
     else if (r.bench)    show = shouldShowBench;
     else if (r.backrest) show = shouldShowBack;
     else if (r.legs){
-      // Different leg geometries — pick by family
       if (currentFamily === 'U' && /^U_legs_/.test(o.name)) show = true;
       else if (currentFamily === 'X' && /^Table_legs_X_/.test(o.name)) show = true;
       else if (currentFamily === 'W' && /^Table_legs_W_/.test(o.name)) show = true;
     }
     if (show){
       o.visible = true;
-      // U-legs are procedural and built at exact length, no scaling needed.
       if (!/^U_legs_/.test(o.name)) o.scale.z = scaleZ;
+      // Apply / remove clipping for benches & backrests
+      if (o.isMesh && o.material){
+        if (r.bench)         o.material.clippingPlanes = benchClipPlanes;
+        else if (r.backrest) o.material.clippingPlanes = backClipPlanes;
+        else                 o.material.clippingPlanes = null;
+        o.material.needsUpdate = true;
+      } else {
+        // For groups, clip every child mesh
+        o.traverse(c => {
+          if (c.isMesh && c.material){
+            if (r.bench)         c.material.clippingPlanes = benchClipPlanes;
+            else if (r.backrest) c.material.clippingPlanes = backClipPlanes;
+            else                 c.material.clippingPlanes = null;
+            c.material.needsUpdate = true;
+          }
+        });
+      }
     }
   });
 
@@ -954,6 +1033,40 @@ function renderBenches(){
 document.querySelectorAll('.frame').forEach(el => el.addEventListener('click', () => setFamily(el.dataset.fam, false)));
 document.getElementById('backOn').addEventListener('change', e => { backOn = e.target.checked; applyVisibility(); });
 document.getElementById('resetView').addEventListener('click', frameCameraToSelection);
+
+// Share — build URL with config and copy to clipboard, then show toast
+function showToast(text){
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = text;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.hidden = true, 300);
+  }, 1800);
+}
+document.getElementById('shareBtn').addEventListener('click', () => {
+  const cfg = getConfig();
+  const url = new URL(location.href);
+  url.searchParams.set('family', cfg.family);
+  url.searchParams.set('length', cfg.length_cm);
+  url.searchParams.set('back',   cfg.backrest ? 1 : 0);
+  url.searchParams.set('benches', cfg.benches);
+  url.searchParams.set('wood',   cfg.wood_tone_key);
+  url.searchParams.set('leg',    cfg.leg_color_key);
+  url.searchParams.set('lang',   cfg.lang);
+  const out = url.toString();
+  // Prefer Web Share API on mobile
+  if (navigator.share && /Mobi|Android|iPhone/i.test(navigator.userAgent)){
+    navigator.share({ title: t('title'), url: out }).catch(()=>{});
+  } else if (navigator.clipboard){
+    navigator.clipboard.writeText(out).then(() => showToast(t('share_copied'))).catch(()=>{});
+  } else {
+    prompt(t('share'), out);
+  }
+});
 let shadowsOn = true;
 document.getElementById('toggleShadow').addEventListener('click', () => {
   shadowsOn = !shadowsOn;
