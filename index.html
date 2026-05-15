@@ -4,6 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>3D Configurator — Picnic Sets</title>
+
+<!-- Asset hints: start network as early as possible -->
+<link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="dns-prefetch"  href="https://www.gstatic.com">
+<link rel="preload" as="fetch" crossorigin href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/angle.glb">
+<link rel="preload" as="fetch" crossorigin href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/xset.glb">
+<link rel="preload" as="image" href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/wood.jpg" crossorigin>
 <style>
   :root{
     --bg:#f3f1ec;
@@ -139,6 +147,16 @@
       </div>
     </div>
 
+    <div class="group">
+      <div class="lbl">Leg color</div>
+      <div class="stones" id="legColors">
+        <div class="swatch active" data-leg="0d0d0d" title="Black (RAL 9005)"      style="background:#0d0d0d"></div>
+        <div class="swatch"        data-leg="2c2f31" title="Anthracite (RAL 7016)" style="background:#2c2f31"></div>
+        <div class="swatch"        data-leg="9aa0a4" title="Light grey (RAL 7035)" style="background:#9aa0a4"></div>
+        <div class="swatch"        data-leg="ebe8e0" title="White (RAL 9010)"      style="background:#ebe8e0"></div>
+      </div>
+    </div>
+
     <div class="summary" id="summary"></div>
 
     <button class="btn" id="addBtn">Add to cart</button>
@@ -264,10 +282,12 @@ loader.setDRACOLoader(draco);
 
 const models = { W:null, X:null };
 let woodTex = null;
+let metalNormalTex = null;
 let currentFamily = 'W';
 let currentLength = 250;
 let backOn = true;
 let tintHex = 0xffffff;
+let legHex  = 0x0d0d0d;
 
 function loadGLB(url){
   return new Promise((res, rej) => {
@@ -292,34 +312,55 @@ function loadWoodTex(){
   });
 }
 
-// Wood grain on the source JPG runs along the IMAGE'S HORIZONTAL axis (U direction).
-// To make grain follow each plank's LENGTH reliably, we IGNORE the authored UVs and
-// regenerate them in local space: U = position along the mesh's longest axis,
-// V = position along the second-longest. Tile size ≈ 0.7m per texture repeat.
+// In this dataset Z is the LENGTH axis for every wood part (table top, bench planks,
+// backrests). Earlier auto-detection failed for short lengths because the bbox X
+// (which spans both benches/backrests on either side of the table) is wider than the
+// actual table length when length < 200 cm. So we hardcode the grain axis to Z.
 function alignWoodToMesh(mesh, baseTex){
   const geom = mesh.geometry;
-  geom.computeBoundingBox();
-  const bb = geom.boundingBox;
-  const size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
-
-  // Sort axes by extent, descending
-  const idx = [0,1,2].sort((a,b) => size[b] - size[a]);
-  const PRI = idx[0]; // longest axis  → grain direction (U)
-  const SEC = idx[1]; // second axis   → V
-
+  const PRI = 2; // Z — grain direction (along the length of the wood)
+  const SEC = 0; // X — across the plank
   const tile = 0.7;
   const pos = geom.attributes.position;
   const arr = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++){
-    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
-    const p = [px, py, pz];
+    const p = [pos.getX(i), pos.getY(i), pos.getZ(i)];
     arr[i*2]     = p[PRI] / tile;
     arr[i*2 + 1] = p[SEC] / tile;
   }
   geom.setAttribute('uv', new THREE.BufferAttribute(arr, 2));
-
-  // Use the shared texture as-is (no rotation, no per-mesh clone needed)
   return baseTex;
+}
+
+// Procedural normal map for powder-coated metal — subtle "orange peel" microsurface.
+function makeMetalNormalMap(){
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  // Generate slight 2D noise → encode as RG, keep B=255 (z-up flat-ish normal)
+  for (let y = 0; y < size; y++){
+    for (let x = 0; x < size; x++){
+      const i = (y*size + x) * 4;
+      // Mix two noise frequencies for a more natural feel
+      const n1x = (Math.random()-0.5);
+      const n1y = (Math.random()-0.5);
+      const nx = n1x * 0.18;
+      const ny = n1y * 0.18;
+      d[i  ] = Math.max(0, Math.min(255, Math.round((nx*0.5 + 0.5) * 255)));
+      d[i+1] = Math.max(0, Math.min(255, Math.round((ny*0.5 + 0.5) * 255)));
+      d[i+2] = 255;
+      d[i+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 6);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
 }
 
 // Tell whether a mesh belongs to a "legs" subassembly (named Table_legs_* on the node
@@ -330,15 +371,20 @@ function isLegMesh(o){
   return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2);
 }
 
-function makeBlackMetalMaterial(){
-  return new THREE.MeshStandardMaterial({
-    color: 0x0d0d0d,     // near-black powder coat
-    metalness: 0.55,     // matte metallic
-    roughness: 0.45,     // not glossy
+function makeMetalMaterial(){
+  const m = new THREE.MeshStandardMaterial({
+    color: legHex,                // dynamic via applyLegColor
+    metalness: 0.55,              // matte metallic
+    roughness: 0.45,              // not glossy
+    normalMap: metalNormalTex,    // powder-coat micro surface
+    normalScale: new THREE.Vector2(0.28, 0.28),
   });
+  m.userData.isMetal = true;
+  return m;
 }
 
 async function loadAll(){
+  metalNormalTex = makeMetalNormalMap();
   const [tex, w, x] = await Promise.all([
     loadWoodTex(),
     loadGLB(URL_W),
@@ -354,7 +400,7 @@ async function loadAll(){
         o.castShadow = true;
         o.receiveShadow = true;
         if (isLegMesh(o)){
-          o.material = makeBlackMetalMaterial();
+          o.material = makeMetalMaterial();
         } else {
           const tex = alignWoodToMesh(o, woodTex);
           const m = new THREE.MeshStandardMaterial({
@@ -371,8 +417,21 @@ async function loadAll(){
     scene.add(root);
   }
   applyTint(tintHex);
+  applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
+}
+
+function applyLegColor(hex){
+  const c = new THREE.Color(hex);
+  for (const k of Object.keys(models)){
+    if (!models[k]) continue;
+    models[k].traverse(o => {
+      if (o.isMesh && o.material && o.material.userData.isMetal){
+        o.material.color.copy(c);
+      }
+    });
+  }
 }
 
 function applyTint(hex){
@@ -500,11 +559,20 @@ document.getElementById('toggleShadow').addEventListener('click', () => {
   sun.castShadow = shadowsOn;
   ground.visible = shadowsOn;
 });
-document.querySelectorAll('.swatch').forEach(el => el.addEventListener('click', () => {
-  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+// Wood-tone swatches
+document.querySelectorAll('#stains .swatch').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('#stains .swatch').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   tintHex = parseInt(el.dataset.tint, 16);
   applyTint(tintHex);
+}));
+
+// Leg-color swatches
+document.querySelectorAll('#legColors .swatch').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('#legColors .swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  legHex = parseInt(el.dataset.leg, 16);
+  applyLegColor(legHex);
 }));
 document.getElementById('addBtn').addEventListener('click', () => {
   const url = new URL(location.href);
