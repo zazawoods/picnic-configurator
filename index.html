@@ -36,7 +36,7 @@
   .chip:hover{border-color:#bbb}
   .chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
   .chip[disabled]{opacity:.35;cursor:not-allowed}
-  .frames{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .frames{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .frame{border:1px solid var(--line);border-radius:14px;padding:12px 8px;background:#fff;cursor:pointer;text-align:center;transition:.15s ease;display:flex;flex-direction:column;align-items:center;gap:6px}
   .frame:hover{border-color:#bbb}
   .frame.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -145,6 +145,11 @@
           <span class="nm">X-frame</span>
           <span class="sz">160–400 cm</span>
         </button>
+        <button class="frame" data-fam="U">
+          <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 V36"/><path d="M22 13 V36"/><path d="M14 36 H22"/><path d="M42 13 V36"/><path d="M50 13 V36"/><path d="M42 36 H50"/></g></svg>
+          <span class="nm">U-frame</span>
+          <span class="sz">160–400 cm</span>
+        </button>
       </div>
     </div>
 
@@ -153,12 +158,16 @@
       <div class="chips" id="lengths"></div>
     </div>
 
-    <div class="group">
+    <div class="group" id="optionsGroup">
       <div class="lbl" data-i18n="options">Options</div>
-      <label class="row">
+      <label class="row" id="rowBackrest" hidden>
         <span data-i18n="backrest">Backrest</span>
         <span class="switch"><input type="checkbox" id="backOn" checked><span class="slider"></span></span>
       </label>
+      <div class="row" id="rowBenches" style="flex-direction:column;align-items:stretch;gap:8px" hidden>
+        <span data-i18n="bench_count">Anzahl der Bänke</span>
+        <div class="chips" id="benchChips"></div>
+      </div>
     </div>
 
     <div class="group">
@@ -219,6 +228,8 @@ const I18N = {
     length_cm: 'Länge, cm',
     options: 'Optionen',
     backrest: 'Rückenlehne',
+    bench_count: 'Anzahl der Bänke',
+    benches_0: 'Keine Sitzbank', benches_1: '1 Sitzbank', benches_2: '2 Sitzbänke',
     wood_tone: 'Holzfarbe',
     natural: 'Natur', oak: 'Eiche', walnut: 'Nussbaum', smoked: 'Geräuchert',
     leg_color: 'Gestellfarbe',
@@ -244,6 +255,8 @@ const I18N = {
     length_cm: 'Length, cm',
     options: 'Options',
     backrest: 'Backrest',
+    bench_count: 'Number of benches',
+    benches_0: 'No bench', benches_1: '1 bench', benches_2: '2 benches',
     wood_tone: 'Wood tone',
     natural: 'Natural', oak: 'Oak', walnut: 'Walnut', smoked: 'Smoked',
     leg_color: 'Leg color',
@@ -269,6 +282,8 @@ const I18N = {
     length_cm: 'Lengte, cm',
     options: 'Opties',
     backrest: 'Rugleuning',
+    bench_count: 'Aantal banken',
+    benches_0: 'Geen bank', benches_1: '1 bank', benches_2: '2 banken',
     wood_tone: 'Houtkleur',
     natural: 'Naturel', oak: 'Eiken', walnut: 'Notenhout', smoked: 'Gerookt',
     leg_color: 'Framekleur',
@@ -314,8 +329,9 @@ function applyLang(code){
   });
   // active flag button
   document.querySelectorAll('.langbtn').forEach(b => b.classList.toggle('active', b.dataset.lang === code));
-  // re-render summary (dynamic content)
+  // re-render summary & bench chips (dynamic content)
   if (window.__updateSummary) window.__updateSummary();
+  if (typeof renderBenches === 'function') renderBenches();
 }
 
 // === Exit / return navigation ===
@@ -346,28 +362,62 @@ const URL_X    = CDN + '/xset.glb';
 const URL_WOOD = CDN + '/wood.jpg';
 
 // === Family configuration ===
+// lengths       — Shopify variant lengths shown in UI (each maps to a real SKU)
+// nativeLengths — physical GLB lengths; non-native lengths render the closest
+//                 native length with scale.z applied for the right look.
+const SHOPIFY_LENGTHS = [160,180,200,220,240,260,280,300,350,400];
+
 const FAMILIES = {
-  W: { lengths: [160,200,250,300,350,400],
+  W: { lengths: SHOPIFY_LENGTHS,
+       nativeLengths: [160,200,300,350,400],
        label: 'Angle (W)',
        tabletop: '89×3 cm',
        height: '≈70 cm',
+       productHandle: 'picknicktisch-aus-massivem-douglasienholz',
+       hasBackrest: true,   // backrest baked-in
+       hasBenchChoice: false, // 2 benches always
        match: (name, L) => ({
          backrest: name === `Backrest_W_${L}`,
          bench:    name === `2benchplanks_W__${L}`,
          legs:     name === `Table_legs_W_${L}`,
          top:      name === `Table_top_W_${L}`,
        })},
-  X: { lengths: [160,200,250,300,350,400],
+  X: { lengths: SHOPIFY_LENGTHS,
+       nativeLengths: [160,200,300,350,400],
        label: 'X-frame',
        tabletop: '89×4.5 cm',
        height: '≈70.5 cm',
+       productHandle: 'gartentisch-aus-massivem-douglasienholz',
+       legOption: 'X-Tischbeine',
+       hasBackrest: false,
+       hasBenchChoice: true,
        match: (name, L) => ({
          backrest: name === `Backrest_X_${L}`,
          bench:    name === `2benchplanks_X_${L}`,
          legs:     name === `Table_legs_X_${L}`,
          top:      name === `Table_top_X_${L}`,
        })},
+  U: { lengths: SHOPIFY_LENGTHS,
+       nativeLengths: SHOPIFY_LENGTHS, // U-legs are procedural — any length
+       label: 'U-frame',
+       tabletop: '89×4.5 cm',
+       height: '≈70 cm',
+       productHandle: 'gartentisch-aus-massivem-douglasienholz',
+       legOption: 'U-Tischbeine',
+       hasBackrest: false,
+       hasBenchChoice: true,
+       match: (name, L) => ({
+         backrest: name === `Backrest_X_${L}`,
+         bench:    name === `2benchplanks_X_${L}`,
+         legs:     name === `U_legs_${L}`,
+         top:      name === `Table_top_X_${L}`,
+       })},
 };
+
+function closestNative(family, L){
+  const arr = FAMILIES[family].nativeLengths;
+  return arr.reduce((best, n) => Math.abs(n-L) < Math.abs(best-L) ? n : best, arr[0]);
+}
 
 // === Three.js setup ===
 const canvas = document.getElementById('c');
@@ -433,8 +483,9 @@ const models = { W:null, X:null };
 let woodTex = null;
 let metalNormalTex = null;
 let currentFamily = 'W';
-let currentLength = 250;
+let currentLength = 200;
 let backOn = true;
+let benchCount = 2; // 0/1/2 — only relevant when family.hasBenchChoice (X/U)
 let tintHex = 0xffffff;
 let legHex  = 0x0d0d0d;
 // Track current swatch labels for cart properties
@@ -503,7 +554,61 @@ function makeMetalNormalMap(){
 function isLegMesh(o){
   const n1 = o.name || '';
   const n2 = (o.parent && o.parent.name) || '';
-  return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2);
+  return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2) || /^U_legs/i.test(n1) || /^U_legs/i.test(n2);
+}
+
+// Procedurally builds a U-shaped metal leg-pair sub-tree for a given table length.
+// Output: a THREE.Group named "U_legs_{L}" containing two pairs of vertical posts
+// joined by horizontal bottom bars, with mounting plates on top.
+function buildULegs(lengthCm){
+  const L = lengthCm / 100;          // metres
+  const POST_W = 0.06, POST_D = 0.06; // square cross-section ~6 cm
+  const POST_H = 0.69;                // height to under-table
+  const SPREAD = 0.72;                // distance between the two vertical posts of one U
+  const PLATE_W = 0.16, PLATE_T = 0.012, PLATE_D = 0.16;
+  const INSET_Z = 0.18;               // how far in from each end of the tabletop the leg pair sits
+  const BENCH_H = 0.42;               // bench seat height (for cross-bar to support bench)
+  const BENCH_REACH = 0.55;           // outward arm length (toward the bench)
+
+  const group = new THREE.Group();
+  group.name = `U_legs_${lengthCm}`;
+
+  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of zPositions){
+    // Two vertical posts
+    const postL = new THREE.Mesh(new THREE.BoxGeometry(POST_W, POST_H, POST_D), makeMetalMaterial());
+    postL.position.set(-SPREAD/2, POST_H/2, z);
+    const postR = new THREE.Mesh(new THREE.BoxGeometry(POST_W, POST_H, POST_D), makeMetalMaterial());
+    postR.position.set( SPREAD/2, POST_H/2, z);
+
+    // Horizontal bottom bar (the floor of the U)
+    const bottom = new THREE.Mesh(
+      new THREE.BoxGeometry(SPREAD + POST_W, POST_W, POST_D),
+      makeMetalMaterial()
+    );
+    bottom.position.set(0, POST_W/2, z);
+
+    // Top mounting plates
+    const plateL = new THREE.Mesh(new THREE.BoxGeometry(PLATE_W, PLATE_T, PLATE_D), makeMetalMaterial());
+    plateL.position.set(-SPREAD/2, POST_H + PLATE_T/2, z);
+    const plateR = new THREE.Mesh(new THREE.BoxGeometry(PLATE_W, PLATE_T, PLATE_D), makeMetalMaterial());
+    plateR.position.set( SPREAD/2, POST_H + PLATE_T/2, z);
+
+    // Simple bench-support arms (so benches don't appear to float):
+    // two horizontal arms extending outward from each post at bench height.
+    const armGeom = new THREE.BoxGeometry(BENCH_REACH, POST_W*0.7, POST_D*0.7);
+    const armL = new THREE.Mesh(armGeom, makeMetalMaterial());
+    armL.position.set(-SPREAD/2 - BENCH_REACH/2, BENCH_H, z);
+    const armR = new THREE.Mesh(armGeom, makeMetalMaterial());
+    armR.position.set( SPREAD/2 + BENCH_REACH/2, BENCH_H, z);
+
+    [postL, postR, bottom, plateL, plateR, armL, armR].forEach(m => {
+      m.castShadow = true; m.receiveShadow = true;
+      group.add(m);
+    });
+  }
+
+  return group;
 }
 
 function makeMetalMaterial(){
@@ -544,9 +649,23 @@ async function loadAll(){
     });
     scene.add(root);
   }
+  // U-frame: attach procedurally-generated U-leg groups (one per Shopify length).
+  for (const L of FAMILIES.U.lengths){
+    const u = buildULegs(L);
+    u.visible = false;
+    models.X.add(u);
+  }
+
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
+}
+
+// Returns the scene root for a given family. U-family shares the X scene because
+// the wooden parts (tabletop, benches, backrest) are reused; only the legs differ.
+function rootForFamily(fam){
+  if (fam === 'U') return models.X;
+  return models[fam];
 }
 
 function applyTint(hex){
@@ -571,30 +690,66 @@ function applyLegColor(hex){
 
 function applyVisibility(){
   const fam = FAMILIES[currentFamily];
-  const root = models[currentFamily];
+  const root = rootForFamily(currentFamily);
   if (!root) return;
   root.visible = true;
   for (const k of Object.keys(models)){
-    if (k !== currentFamily && models[k]) models[k].visible = false;
+    if (models[k] && models[k] !== root) models[k].visible = false;
   }
-  for (const L of fam.lengths){
+
+  const renderL = closestNative(currentFamily, currentLength);
+  const scaleZ  = currentLength / renderL;
+
+  // Pass 1: hide every named asset, reset scales
+  for (const L of fam.nativeLengths){
     root.traverse(o => {
       if (!o.name) return;
       const r = fam.match(o.name, L);
-      if (!(r.top || r.legs || r.bench || r.backrest)) return;
-      if (L !== currentLength) o.visible = false;
-      else {
-        if (r.top || r.legs || r.bench) o.visible = true;
-        else if (r.backrest) o.visible = backOn;
+      if (r.top || r.legs || r.bench || r.backrest){
+        o.visible = false;
+        o.scale.z = 1;
       }
     });
   }
+  // Also reset the other family's native leg/wood meshes (they share the X scene)
+  if (currentFamily === 'U' || currentFamily === 'X'){
+    root.traverse(o => {
+      if (!o.name) return;
+      if (/^Table_legs_X_|^U_legs_/.test(o.name)){ o.visible = false; o.scale.z = 1; }
+    });
+  }
+
+  // Pass 2: enable the right pieces for currentLength using renderL, with scale
+  const shouldShowBench = (fam.hasBenchChoice ? benchCount > 0 : true);
+  const shouldShowBack  = (fam.hasBackrest ? backOn : false);
+
+  root.traverse(o => {
+    if (!o.name) return;
+    const r = fam.match(o.name, renderL);
+    if (!(r.top || r.legs || r.bench || r.backrest)) return;
+    let show = false;
+    if (r.top)           show = true;
+    else if (r.bench)    show = shouldShowBench;
+    else if (r.backrest) show = shouldShowBack;
+    else if (r.legs){
+      // Different leg geometries — pick by family
+      if (currentFamily === 'U' && /^U_legs_/.test(o.name)) show = true;
+      else if (currentFamily === 'X' && /^Table_legs_X_/.test(o.name)) show = true;
+      else if (currentFamily === 'W' && /^Table_legs_W_/.test(o.name)) show = true;
+    }
+    if (show){
+      o.visible = true;
+      // U-legs are procedural and built at exact length, no scaling needed.
+      if (!/^U_legs_/.test(o.name)) o.scale.z = scaleZ;
+    }
+  });
+
   frameCameraToSelection();
   updateSummary();
 }
 
 function frameCameraToSelection(){
-  const root = models[currentFamily];
+  const root = rootForFamily(currentFamily);
   if (!root) return;
   root.updateMatrixWorld(true);
   function ancestorsVisible(obj){ let x=obj; while(x){if(x.visible===false)return false;x=x.parent;} return true; }
@@ -623,13 +778,20 @@ function frameCameraToSelection(){
 
 function updateSummary(){
   const fam = FAMILIES[currentFamily];
-  const parts = [t('part_tabletop'), t('part_legs'), t('part_benches')];
-  if (backOn) parts.push(t('part_backrest'));
+  const parts = [t('part_tabletop'), t('part_legs')];
+  const effectiveBenches = fam.hasBenchChoice ? benchCount : 2;
+  if (effectiveBenches > 0) parts.push(t('part_benches'));
+  if (fam.hasBackrest && backOn) parts.push(t('part_backrest'));
+  let benchLine = '';
+  if (fam.hasBenchChoice){
+    benchLine = `<div class="dim"><span>${t('bench_count')}</span><b>${t('benches_' + benchCount)}</b></div>`;
+  }
   document.getElementById('summary').innerHTML = `
     <div class="dim"><span>${t('sum_frame')}</span><b>${fam.label}</b></div>
     <div class="dim"><span>${t('sum_length')}</span><b>${currentLength} cm</b></div>
     <div class="dim"><span>${t('sum_tabletop')}</span><b>${fam.tabletop}</b></div>
     <div class="dim"><span>${t('sum_height')}</span><b>${fam.height}</b></div>
+    ${benchLine}
     <div class="dim"><span>${t('sum_included')}</span><b>${parts.join(', ')}</b></div>
   `;
 }
@@ -651,15 +813,38 @@ function setFamily(fam, force){
   if (!force && fam === currentFamily) return;
   if (!FAMILIES[fam]) return;
   currentFamily = fam;
-  const ls = FAMILIES[fam].lengths;
+  const F = FAMILIES[fam];
+  const ls = F.lengths;
   if (!ls.includes(currentLength)){
     let best = ls[0], bd = Infinity;
     for (const v of ls){ const d = Math.abs(v - currentLength); if (d<bd){bd=d;best=v;} }
     currentLength = best;
   }
   document.querySelectorAll('.frame').forEach(el => el.classList.toggle('active', el.dataset.fam===fam));
+
+  // Show only the options that this family supports
+  const rowBack   = document.getElementById('rowBackrest');
+  const rowBench  = document.getElementById('rowBenches');
+  if (rowBack)  rowBack.hidden  = !F.hasBackrest;
+  if (rowBench) rowBench.hidden = !F.hasBenchChoice;
+  if (F.hasBackrest)   { backOn = true;  const c = document.getElementById('backOn'); if (c) c.checked = true; }
+  if (!F.hasBenchChoice){ benchCount = 2; }
+
   renderLengths();
+  renderBenches();
   applyVisibility();
+}
+
+function renderBenches(){
+  const wrap = document.getElementById('benchChips'); if (!wrap) return;
+  wrap.innerHTML = '';
+  [0,1,2].forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (n===benchCount?' active':'');
+    b.textContent = t('benches_' + n);
+    b.onclick = () => { benchCount = n; renderBenches(); applyVisibility(); };
+    wrap.appendChild(b);
+  });
 }
 
 document.querySelectorAll('.frame').forEach(el => el.addEventListener('click', () => setFamily(el.dataset.fam, false)));
@@ -692,17 +877,22 @@ document.querySelectorAll('.langbtn').forEach(b => b.addEventListener('click', (
 
 // === Add to cart — sends config to parent (Shopify storefront) via postMessage ===
 function getConfig(){
+  const fam = FAMILIES[currentFamily];
+  const benches = fam.hasBenchChoice ? benchCount : 2;
   return {
     family: currentFamily,
-    family_label: FAMILIES[currentFamily].label,
+    family_label: fam.label,
+    productHandle: fam.productHandle || '',
+    legOption: fam.legOption || '',           // 'X-Tischbeine' | 'U-Tischbeine' | ''
     length_cm: currentLength,
-    backrest: backOn,
+    backrest: fam.hasBackrest ? backOn : false,
+    benches: benches,                          // 0 / 1 / 2
     wood_tone: t(tintKey),
     wood_tone_key: tintKey,
     leg_color: t(legKey),
     leg_color_key: legKey,
-    tabletop: FAMILIES[currentFamily].tabletop,
-    height:   FAMILIES[currentFamily].height,
+    tabletop: fam.tabletop,
+    height:   fam.height,
     lang: currentLang,
   };
 }
