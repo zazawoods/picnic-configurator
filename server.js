@@ -24,6 +24,14 @@ const MIME = {
 };
 const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.gltf']);
 
+// Files in the project root that must NEVER be served (server source, package metadata,
+// dotfiles, version-control). Only the public-facing assets below this set are exposed.
+const PUBLIC_ALLOW = new Set([
+  '/', '/index.html',
+  '/angle.glb', '/xset.glb', '/wood.jpg',
+  '/favicon.ico',
+]);
+
 function safeJoin(rel) {
   const decoded = decodeURIComponent(rel.split('?')[0]);
   const target  = path.normalize(path.join(root, decoded));
@@ -32,7 +40,15 @@ function safeJoin(rel) {
 }
 
 http.createServer((req, res) => {
-  let urlPath = req.url === '/' ? '/index.html' : req.url;
+  // Strip query string for allow-list match; normalize trailing slashes
+  const rawPath = req.url.split('?')[0];
+  const cleanPath = rawPath === '/' ? '/' : rawPath.replace(/\/+$/, '');
+  if (!PUBLIC_ALLOW.has(cleanPath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Content-Type-Options': 'nosniff' });
+    res.end('not found');
+    return;
+  }
+  let urlPath = cleanPath === '/' ? '/index.html' : cleanPath;
   let target  = safeJoin(urlPath);
   if (!target) { res.writeHead(400); res.end('bad path'); return; }
 
@@ -49,8 +65,17 @@ http.createServer((req, res) => {
       'Content-Type': mime,
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'no-referrer-when-downgrade',
+      'Permissions-Policy': 'interest-cohort=()',
       'Access-Control-Allow-Origin': '*',
+      // Defense-in-depth CSP. Allows the CDNs we actually use (unpkg, gstatic, raw.github).
+      'Content-Security-Policy': ext === '.html'
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src 'self' https://unpkg.com https://www.gstatic.com https://raw.githubusercontent.com; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'"
+        : undefined,
     };
+    // Drop undefined CSP for non-HTML
+    if (headers['Content-Security-Policy'] === undefined) delete headers['Content-Security-Policy'];
 
     const stream = fs.createReadStream(target);
     stream.on('error', () => { try { res.writeHead(500); res.end('read err'); } catch(_){} });
