@@ -55,6 +55,11 @@
   .swatch{aspect-ratio:1;border-radius:10px;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
   .swatch.active{border-color:var(--accent)}
   .summary{font-size:13px;color:var(--ink);background:#faf8f3;border:1px solid var(--line);border-radius:12px;padding:12px}
+  .price-box{display:flex;align-items:baseline;justify-content:space-between;padding:14px 16px;background:#1c1a16;color:#fff;border-radius:12px}
+  .price-box[hidden]{display:none}
+  .price-label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+  .price-amount{font-size:22px;font-weight:600;letter-spacing:.2px}
+  .price-amount.loading{opacity:.4}
   .summary b{font-weight:600}
   .summary .dim{display:flex;justify-content:space-between;padding:2px 0;color:var(--muted)}
   .summary .dim b{color:var(--ink)}
@@ -192,6 +197,11 @@
 
     <div class="summary" id="summary"></div>
 
+    <div id="priceBox" class="price-box" hidden>
+      <span class="price-label" data-i18n="price">Preis</span>
+      <span class="price-amount" id="priceAmount">—</span>
+    </div>
+
     <button class="btn" id="addBtn" data-i18n="add_to_cart">Add to cart</button>
     <div class="small" style="text-align:center" data-i18n="footnote">Prototype. Geometry and textures sourced from your GLB files.</div>
   </aside>
@@ -230,6 +240,7 @@ const I18N = {
     backrest: 'Rückenlehne',
     bench_count: 'Anzahl der Bänke',
     benches_0: 'Keine Sitzbank', benches_1: '1 Sitzbank', benches_2: '2 Sitzbänke',
+    price: 'Preis',
     wood_tone: 'Holzfarbe',
     natural: 'Natur', oak: 'Eiche', walnut: 'Nussbaum', smoked: 'Geräuchert',
     leg_color: 'Gestellfarbe',
@@ -257,6 +268,7 @@ const I18N = {
     backrest: 'Backrest',
     bench_count: 'Number of benches',
     benches_0: 'No bench', benches_1: '1 bench', benches_2: '2 benches',
+    price: 'Price',
     wood_tone: 'Wood tone',
     natural: 'Natural', oak: 'Oak', walnut: 'Walnut', smoked: 'Smoked',
     leg_color: 'Leg color',
@@ -284,6 +296,7 @@ const I18N = {
     backrest: 'Rugleuning',
     bench_count: 'Aantal banken',
     benches_0: 'Geen bank', benches_1: '1 bank', benches_2: '2 banken',
+    price: 'Prijs',
     wood_tone: 'Houtkleur',
     natural: 'Naturel', oak: 'Eiken', walnut: 'Notenhout', smoked: 'Gerookt',
     leg_color: 'Framekleur',
@@ -332,6 +345,7 @@ function applyLang(code){
   // re-render summary & bench chips (dynamic content)
   if (window.__updateSummary) window.__updateSummary();
   if (typeof renderBenches === 'function') renderBenches();
+  if (typeof updatePrice === 'function') updatePrice();
 }
 
 // === Exit / return navigation ===
@@ -746,6 +760,7 @@ function applyVisibility(){
 
   frameCameraToSelection();
   updateSummary();
+  updatePrice();
 }
 
 function frameCameraToSelection(){
@@ -775,6 +790,95 @@ function frameCameraToSelection(){
   camera.far  = fitDist*20;
   camera.updateProjectionMatrix();
 }
+
+// === Live price (multi-product cache) ============================
+// The Shopify parent page posts {source:'shopify-parent', type:'product-data', product:{...}}
+// for each product the configurator might add to cart (Picknicktisch + Gartentisch).
+// We keep them keyed by handle and resolve which to use based on the current family.
+const productCache = Object.create(null); // handle → product object
+
+function benchLabelDE(n){
+  if (n === 0) return 'Keine Sitzbank';
+  if (n === 1) return '1 Sitzbank';
+  return '2 Sitzbänke';
+}
+
+function findVariantInProduct(product, fam, lengthCm, benches){
+  if (!product || !product.variants) return null;
+  const lenStr = String(lengthCm);
+  const lenA = lenStr + 'cm';
+  const lenB = lenStr + 'cm x 180cm';
+  const benchStr = benchLabelDE(benches);
+  return product.variants.find(v => {
+    const opts = [v.option1, v.option2, v.option3].filter(Boolean);
+    const hasLen = opts.some(o => o === lenA || o === lenB);
+    if (!hasLen) return false;
+    if (fam.legOption && opts.indexOf(fam.legOption) === -1) return false;
+    if (fam.legOption && opts.indexOf(benchStr) === -1) return false;
+    return true;
+  }) || null;
+}
+
+function formatPriceCents(cents, currency, lang){
+  // Shopify product.variants[].price is in MINOR units (cents)
+  const value = (cents/100);
+  try {
+    return new Intl.NumberFormat(lang === 'en' ? 'en-DE' : (lang === 'nl' ? 'nl-NL' : 'de-DE'),
+      { style:'currency', currency: currency || 'EUR' }).format(value);
+  } catch(_) {
+    return '€' + value.toFixed(2).replace('.', ',');
+  }
+}
+
+function updatePrice(){
+  const el = document.getElementById('priceAmount');
+  const box = document.getElementById('priceBox');
+  if (!el || !box) return;
+  const fam = FAMILIES[currentFamily];
+  const handle = fam.productHandle;
+  const product = handle ? productCache[handle] : null;
+  if (!product){
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const benches = fam.hasBenchChoice ? benchCount : 2;
+  const v = findVariantInProduct(product, fam, currentLength, benches);
+  if (v){
+    el.textContent = formatPriceCents(v.price, 'EUR', currentLang);
+    el.classList.remove('loading');
+  } else {
+    el.textContent = '—';
+    el.classList.add('loading');
+  }
+}
+
+// Request product data from parent and listen for incoming product-data messages.
+function requestProductData(){
+  if (window.parent && window.parent !== window){
+    try {
+      window.parent.postMessage({source:'picnic-configurator', type:'request-product-data'}, '*');
+    } catch(_){}
+  }
+}
+window.addEventListener('message', e => {
+  const d = e.data;
+  if (!d || d.source !== 'shopify-parent') return;
+  if (d.type === 'product-data' && d.product && d.product.handle){
+    productCache[d.product.handle] = d.product;
+    updatePrice();
+  }
+});
+// Retry handshake a few times — iframe may load before the parent listener is wired
+let __pdRetry = 0;
+const __pdInt = setInterval(() => {
+  // Stop once we have any data, or after ~15 attempts
+  if (Object.keys(productCache).length || __pdRetry++ > 14){
+    clearInterval(__pdInt);
+    return;
+  }
+  requestProductData();
+}, 600);
 
 function updateSummary(){
   const fam = FAMILIES[currentFamily];
