@@ -527,7 +527,13 @@ async function loadAll(){
     root.traverse(o => {
       if (o.isMesh){
         o.castShadow = true; o.receiveShadow = true;
-        if (isLegMesh(o)){
+        // Read original material name BEFORE overwriting. In the source GLBs the
+        // metal accents (backrest support brackets, hardware) use material name
+        // 'base material' while wooden parts use 'base table'. Anything matching
+        // 'base material' is treated as metal so it gets the leg color.
+        const origMat = (o.material && o.material.name || '').toLowerCase();
+        const isMetalAccent = origMat === 'base material';
+        if (isLegMesh(o) || isMetalAccent){
           o.material = makeMetalMaterial();
         } else {
           const tex = alignWoodToMesh(o, woodTex);
