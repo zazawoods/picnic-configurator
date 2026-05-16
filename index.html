@@ -1209,15 +1209,19 @@ async function loadAll(){
     const wcenter = wbox.getCenter(new THREE.Vector3());
 
     // Create a Group at the geometric centre and attach the leg to it.
-    // attach() preserves the leg's world position, so the inner mesh stays put
-    // visually but is now relative to a centre-pivot wrapper.
+    // attach() preserves the leg's world position; we then shift the inner
+    // node UP by W_LEG_Y_OFFSET (in wrap-local space) so the V-tops align
+    // with the bottom of the thick picknickset wood. We name the wrap with
+    // a DIFFERENT prefix so Pass 1's named-variant regex doesn't gobble it.
     const wrap = new THREE.Group();
-    wrap.name = node.name; // keep the name on the wrapper so __wLegs lookup works
+    wrap.name = `WLEG_${L}`;        // wrapper uses its own prefix
     wrap.position.copy(wcenter);
-    wrap.position.y += W_LEG_Y_OFFSET;
     wrap.visible = false;
     models.SET.add(wrap);
     wrap.attach(node);
+    // After attach, node sits at its original world position relative to
+    // wrap; lift it +Y by the offset so legs reach the thick tabletop bottom.
+    node.position.y += W_LEG_Y_OFFSET;
 
     window.__wLegs[L] = wrap;
   }
@@ -1361,18 +1365,19 @@ function applyVisibility(){
       const targetSpan = (currentLength / 100) - 2 * INSET_M;
       const legScaleZ = targetSpan / NATIVE_LEG_BBOX_Z[legRenderL];
       for (const L of Object.keys(window.__wLegs)){
-        const node = window.__wLegs[L];
-        if (parseInt(L) === legRenderL){
-          node.visible = true;
-          node.scale.z = legScaleZ;
-        } else {
-          node.visible = false;
-          node.scale.z = 1;
-        }
+        const wrap = window.__wLegs[L];
+        const isMatch = parseInt(L) === legRenderL;
+        wrap.visible = isMatch;
+        wrap.scale.z = isMatch ? legScaleZ : 1;
+        // Pass 1's regex also hid the inner mesh (which still has the original
+        // `Table_legs_W_<L>` name). Force-restore its visibility here.
+        wrap.traverse(c => { c.visible = isMatch; });
       }
     } else {
       for (const L of Object.keys(window.__wLegs)){
-        window.__wLegs[L].visible = false;
+        const wrap = window.__wLegs[L];
+        wrap.visible = false;
+        wrap.traverse(c => { c.visible = false; });
       }
     }
   }
