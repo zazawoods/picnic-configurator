@@ -1275,14 +1275,19 @@ function applyVisibility(){
   });
 
   // W-Frame integrated legs (from angle.glb, indexed in window.__wLegs).
-  // Use the leg-specific native length list — wood is always native (10 lengths),
-  // but legs have only 6 native variants, so close-match + scale for the rest.
+  // The native angle.glb meshes have V-frames inset 27.5cm from each table end,
+  // but the real product (and X/U here) sit much tighter — about 7cm inset.
+  // We rescale Z so the V-frames end up at currentLength/2 - 7cm.
   if (window.__wLegs){
     if (currentFamily === 'W'){
       const legNat = fam.legNativeLengths || fam.nativeLengths;
       const legRenderL = legNat.reduce((b, n) =>
         Math.abs(n - currentLength) < Math.abs(b - currentLength) ? n : b, legNat[0]);
-      const legScaleZ = currentLength / legRenderL;
+      // Measured native Z-bbox spans (V-frame positions) for each angle.glb variant
+      const NATIVE_LEG_BBOX_Z = { 160:1.05, 200:1.45, 250:1.95, 300:2.45, 350:2.95, 400:3.45 };
+      const INSET_M = 0.07;       // target inset from table end (matches X/U)
+      const targetSpan = (currentLength / 100) - 2 * INSET_M;
+      const legScaleZ = targetSpan / NATIVE_LEG_BBOX_Z[legRenderL];
       for (const L of Object.keys(window.__wLegs)){
         const node = window.__wLegs[L];
         if (parseInt(L) === legRenderL){
@@ -1294,7 +1299,6 @@ function applyVisibility(){
         }
       }
     } else {
-      // hide all W legs when family isn't W
       for (const L of Object.keys(window.__wLegs)){
         window.__wLegs[L].visible = false;
       }
