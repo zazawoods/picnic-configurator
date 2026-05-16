@@ -575,6 +575,7 @@ function makeMatch(legStyle){
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
        nativeLengths: SHOPIFY_LENGTHS,
+       legNativeLengths: [160, 200, 250, 300, 350, 400],
        label: 'W-Frame',
        tabletop: '89×9 cm',
        height: '≈75 cm',
@@ -582,12 +583,13 @@ const FAMILIES = {
        hasBackrest: false,
        hasBenchChoice: false,
        legStyle: 'W',
-       // W uses picknickset's thick wood + procedural W_legs designed to mate
-       // flush with that exact wood thickness (no CAD mismatch).
+       // W uses picknickset's thick wood + REAL angle.glb integrated W-leg
+       // ("sheet-metal" silhouette like the real product). Leg is handled
+       // specially in applyVisibility via __wLegs lookup.
        match: (name, L) => ({
          bench1:     name === `3planks_bench1_${L}`,
          bench2:     name === `3planks_bench2_${L}`,
-         legs:       name === `W_legs_${L}`,
+         legs:       false,
          benchlegs1: false,
          benchlegs2: false,
          top:        name === `Table_top_${L}`,
@@ -700,8 +702,8 @@ let legKey  = 'black';
 // Each major asset contributes to the global progress %.
 // We use rough weights so the bar moves smoothly (xset.glb is ~4.5MB so the
 // biggest chunk).
-const LOAD_WEIGHTS = { 'set': 100 };
-const loadState = { set:0 };
+const LOAD_WEIGHTS = { 'set': 75, 'w': 25 };
+const loadState = { set:0, w:0 };
 function setLoadProgress(key, fraction){
   loadState[key] = Math.max(0, Math.min(1, fraction || 0));
   let total = 0, full = 0;
@@ -1127,48 +1129,71 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  // Single GLB: picknickset.glb has all wood + Xshape/Ushape legs.
-  // W-Frame legs are procedurally generated (see buildWFrame) so the wood/metal
-  // joints are mathematically flush — no CAD-mismatch.
-  const setRoot = await loadGLB(URL_SET, 'set');
+  // Two GLBs in parallel: picknickset (wood + X/U legs) + angle (real W leg).
+  const [setRoot, wRoot] = await Promise.all([
+    loadGLB(URL_SET, 'set'),
+    loadGLB(URL_W,   'w'),
+  ]);
   models.SET = setRoot;
   setRoot.visible = false;
+  wRoot.visible   = false;
 
-  setRoot.traverse(o => {
-    if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = true;
-    const origMat = (o.material && o.material.name || '').toLowerCase();
-    const isMetalAccent = origMat === 'base material' || isLegMesh(o);
-    if (isMetalAccent){
-      o.material = makeMetalMaterial();
-    } else {
-      const origTex = o.material && o.material.map;
-      if (origTex){
-        origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
-        origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        origTex.colorSpace = THREE.SRGBColorSpace;
-        origTex.needsUpdate = true;
-        woodTex = woodTex || origTex;
+  function processRoot(root, preferEmbeddedTex){
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      const origMat = (o.material && o.material.name || '').toLowerCase();
+      const isMetalAccent = origMat === 'base material' || isLegMesh(o);
+      if (isMetalAccent){
+        o.material = makeMetalMaterial();
+      } else {
+        const origTex = o.material && o.material.map;
+        if (origTex && preferEmbeddedTex){
+          origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
+          origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          origTex.colorSpace = THREE.SRGBColorSpace;
+          origTex.needsUpdate = true;
+          woodTex = woodTex || origTex;
+        }
+        const m = new THREE.MeshStandardMaterial({
+          map: woodTex || origTex,
+          color: 0xffffff,
+          roughness: 0.72,
+          metalness: 0.0,
+        });
+        m.userData.isWood = true;
+        o.material = m;
       }
-      const m = new THREE.MeshStandardMaterial({
-        map: woodTex || origTex,
-        color: 0xffffff,
-        roughness: 0.72,
-        metalness: 0.0,
-      });
-      m.userData.isWood = true;
-      o.material = m;
-    }
-  });
-  scene.add(setRoot);
-
-  // Generate the procedural W-frame for every Shopify length (mates exactly
-  // with picknickset wood dimensions — no scaling, no Y offset).
-  for (const L of SHOPIFY_LENGTHS){
-    const w = buildWFrame(L);
-    w.visible = false;
-    setRoot.add(w);
+    });
+    scene.add(root);
   }
+  processRoot(setRoot, true);
+  processRoot(wRoot,   false);
+
+  // Extract real W-leg meshes from angle.glb into models.SET. Y-offset lifts
+  // them so the V-tops just touch the bottom of the 9cm picknickset table top.
+  const W_LEG_Y_OFFSET = 0.045;  // picknickset table-top bottom Y=0.745 vs angle native top ~0.70
+  window.__wLegs = {};
+  const legsToMove = [];
+  wRoot.traverse(o => {
+    const m = o.name && o.name.match(/^Table_legs_W_(\d+)$/);
+    if (m) legsToMove.push({ L: parseInt(m[1]), node: o });
+  });
+  for (const { L, node } of legsToMove){
+    node.updateWorldMatrix(true, false);
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const scl = new THREE.Vector3();
+    node.matrixWorld.decompose(pos, quat, scl);
+    pos.y += W_LEG_Y_OFFSET;
+    node.position.copy(pos);
+    node.quaternion.copy(quat);
+    node.scale.copy(scl);
+    node.visible = false;
+    models.SET.add(node);
+    window.__wLegs[L] = node;
+  }
+  scene.remove(wRoot);
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
@@ -1225,7 +1250,7 @@ function applyVisibility(){
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|W_legs).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
   root.traverse(o => {
     if (o.name && NAMED_VARIANT.test(o.name)){
       o.visible = false;
@@ -1268,6 +1293,36 @@ function applyVisibility(){
         });
       }
     });
+  }
+
+  // W-Frame integrated leg from angle.glb (indexed by length in __wLegs).
+  // Native lengths are inset 27.5cm from each table end and have 6 variants
+  // (160/200/250/300/350/400). We scale Z so the V-frames end up ~7cm from
+  // the table ends — matches the inset of X/U legs and the real product.
+  if (window.__wLegs){
+    if (currentFamily === 'W'){
+      const legNat = fam.legNativeLengths || fam.nativeLengths;
+      const legRenderL = legNat.reduce((b, n) =>
+        Math.abs(n - currentLength) < Math.abs(b - currentLength) ? n : b, legNat[0]);
+      const NATIVE_LEG_BBOX_Z = { 160:1.05, 200:1.45, 250:1.95, 300:2.45, 350:2.95, 400:3.45 };
+      const INSET_M = 0.07;
+      const targetSpan = (currentLength / 100) - 2 * INSET_M;
+      const legScaleZ = targetSpan / NATIVE_LEG_BBOX_Z[legRenderL];
+      for (const L of Object.keys(window.__wLegs)){
+        const node = window.__wLegs[L];
+        if (parseInt(L) === legRenderL){
+          node.visible = true;
+          node.scale.z = legScaleZ;
+        } else {
+          node.visible = false;
+          node.scale.z = 1;
+        }
+      }
+    } else {
+      for (const L of Object.keys(window.__wLegs)){
+        window.__wLegs[L].visible = false;
+      }
+    }
   }
 
   frameCameraToSelection();
