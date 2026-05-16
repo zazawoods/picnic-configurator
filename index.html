@@ -788,52 +788,54 @@ function isLegMesh(o){
 // W-Frame: ONE INTEGRATED metal structure per table end that supports BOTH
 // the tabletop and both bench seats. End-on silhouette is a "W" / "M". This
 // is the Picknicktisch product on the site — table and benches share legs.
+// Profile: chunky square-section metal beams (~8cm) like the real product,
+// not flat sheet metal.
 function buildWFrame(lengthCm){
   const L = lengthCm / 100;
-  const TABLE_HALF_W   = 0.40;   // inner attachment to tabletop
-  const GROUND_HALF_W  = 0.22;   // narrow ground footprint between the two V's
+  const TABLE_HALF_W   = 0.39;   // inner attachment to tabletop (slightly narrower than top)
+  const GROUND_HALF_W  = 0.20;   // narrow ground footprint between the two V's
   const BENCH_OUTER_X  = 1.06;   // outer bench corner (where leg meets bench)
-  const TABLE_H        = 0.69;
-  const BENCH_H        = 0.40;
-  const INSET_Z        = 0.18;
-  const SLAB_H         = 0.10;   // slab vertical extent
-  const SLAB_T         = 0.030;  // sheet metal thickness along Z
-  const BAR_T          = 0.05;
+  const TABLE_H        = 0.71;
+  const BENCH_H        = 0.42;
+  const INSET_Z        = 0.16;
+  const BEAM_W         = 0.08;   // metal beam cross-section width (Y)
+  const BEAM_T         = 0.06;   // metal beam cross-section depth (Z)
+  const BAR_T          = 0.06;
 
   const group = new THREE.Group();
   group.name = `W_legs_${lengthCm}`;
 
   const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
   for (const z of zPositions){
-    // 4 angled slab segments forming the W/M outline
+    // 4 angled beam segments forming the W/M outline — two V's per end.
     const points = [
-      [-BENCH_OUTER_X, BENCH_H],
-      [-GROUND_HALF_W, 0],
-      [-TABLE_HALF_W,  TABLE_H],
-      [ TABLE_HALF_W,  TABLE_H],
-      [ GROUND_HALF_W, 0],
-      [ BENCH_OUTER_X, BENCH_H],
+      [-BENCH_OUTER_X, BENCH_H],   // P0: bench-outer-left top
+      [-GROUND_HALF_W, 0],         // P1: ground left
+      [-TABLE_HALF_W,  TABLE_H],   // P2: table-inner-left top
+      [ TABLE_HALF_W,  TABLE_H],   // P3: table-inner-right top
+      [ GROUND_HALF_W, 0],         // P4: ground right
+      [ BENCH_OUTER_X, BENCH_H],   // P5: bench-outer-right top
     ];
     for (let i = 0; i < points.length - 1; i++){
-      // Skip the horizontal top segment between the two inner table corners —
-      // we'll do that with a dedicated top crossbar so its profile is square.
+      // Segment between P2 and P3 is the horizontal top — handled by topBar.
       if (i === 2) continue;
       const [x1, y1] = points[i];
       const [x2, y2] = points[i + 1];
       const dx = x2 - x1, dy = y2 - y1;
       const len = Math.hypot(dx, dy);
-      const slab = new THREE.Mesh(
-        new THREE.BoxGeometry(len, SLAB_H, SLAB_T),
+      // Slightly extend beam length so the joint corners overlap nicely.
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(len + BEAM_W * 0.15, BEAM_W, BEAM_T),
         makeMetalMaterial()
       );
-      slab.position.set((x1+x2)/2, (y1+y2)/2, z);
-      slab.rotation.z = Math.atan2(dy, dx);
-      slab.castShadow = true; slab.receiveShadow = true;
-      group.add(slab);
+      beam.position.set((x1+x2)/2, (y1+y2)/2, z);
+      beam.rotation.z = Math.atan2(dy, dx);
+      beam.castShadow = true; beam.receiveShadow = true;
+      group.add(beam);
     }
-    // Top crossbar under the tabletop
+    // Top crossbar under the tabletop (inner V's connector)
     const topBar = new THREE.Mesh(
-      new THREE.BoxGeometry(TABLE_HALF_W * 2, BAR_T, BAR_T * 1.6),
+      new THREE.BoxGeometry(TABLE_HALF_W * 2 + BEAM_W * 0.5, BAR_T, BEAM_T),
       makeMetalMaterial()
     );
     topBar.position.set(0, TABLE_H - BAR_T/2, z);
