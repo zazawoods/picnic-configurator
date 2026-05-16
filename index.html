@@ -1054,15 +1054,15 @@ function buildWLegs(lengthCm){
 // X-Frame procedural TABLE legs only — two clean X-frames at the table ends.
 // Replaces the cluttered baked-in GLB X-legs so the silhouette matches the
 // actual product photo. Bench legs are produced separately by buildXBenchLegs.
-// X-Frame procedural TABLE legs — per user spec: 72cm wide × 70cm tall
-// X footprint, 10×10cm square beam cross-section.
+// X-Frame procedural TABLE legs — per user spec: 70cm wide × 72cm tall
+// X structure, 10×10cm square beam cross-section for the table.
 function buildXLegs(lengthCm){
   const L = lengthCm / 100;
-  const X_HALF_W        = 0.36;        // 72cm wide footprint
-  const X_HEIGHT        = 0.70;        // 70cm tall X structure
+  const X_HALF_W        = 0.35;        // 70cm wide footprint
+  const X_HEIGHT        = 0.72;        // 72cm tall
   const TABLE_Y_BOTTOM  = 0.745;
   const INSET_Z         = 0.10;
-  const BEAM            = 0.10;        // 10×10cm square profile
+  const BEAM            = 0.10;        // 10×10cm square profile (table)
   const OVERSHOOT       = 0.02;
 
   // Lift the X so its top sits flush with the table bottom (Y = TABLE_Y_BOTTOM).
