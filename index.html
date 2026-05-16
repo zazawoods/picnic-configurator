@@ -579,8 +579,7 @@ const FAMILIES = {
        match: (name, L) => ({
          backrest: name === `Backrest_X_${L}`,
          bench:    name === `2benchplanks_X_${L}`,
-         // Table X-legs from GLB + procedural bench X-legs both count as "legs"
-         legs:     name === `Table_legs_X_${L}` || name === `X_bench_legs_${L}`,
+         legs:     name === `Table_legs_X_${L}`,
          top:      name === `Table_top_X_${L}`,
        })},
   U: { lengths: SHOPIFY_LENGTHS,
@@ -988,13 +987,10 @@ async function loadAll(){
     w.visible = false;
     models.W.add(w);
   }
-  // X-frame: procedural small X-supports under each bench end (the GLB only has
-  // the table X-legs, not bench legs).
-  for (const L of FAMILIES.X.lengths){
-    const xb = buildXBenchLegs(L);
-    xb.visible = false;
-    models.X.add(xb);
-  }
+  // X-frame: NO procedural bench legs. The GLB's Table_legs_X already spans
+  // the full bench-to-bench width — adding small extra Xs under each bench
+  // makes the result look cluttered vs the real product photo. Bench seats
+  // attach directly to the GLB X-legs as in the actual furniture.
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
