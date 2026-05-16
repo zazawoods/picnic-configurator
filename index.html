@@ -337,6 +337,22 @@
         </div>
       </details>
 
+      <details class="acc" id="accBackrest" hidden>
+        <summary>
+          <span class="acc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19v-8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8"/><path d="M3 19h18"/><path d="M7 8V5"/><path d="M17 8V5"/></svg>
+          </span>
+          <span class="acc-text">
+            <span class="acc-title" data-i18n="backrest">Backrest</span>
+            <span class="acc-value" id="accBackrestValue">Without backrest</span>
+          </span>
+          <span class="acc-chev">▾</span>
+        </summary>
+        <div class="acc-body">
+          <div class="chips" id="backrestChips"></div>
+        </div>
+      </details>
+
     </div>
 
     <!-- Hidden, kept for JS compatibility: backrest is always-on for W and not
@@ -391,6 +407,8 @@ const I18N = {
     length_cm: 'Länge, cm',
     options: 'Optionen',
     backrest: 'Rückenlehne',
+    backrest_with: 'Mit Rückenlehne',
+    backrest_without: 'Ohne Rückenlehne',
     bench_count: 'Anzahl der Bänke',
     benches_0: 'Keine Sitzbank', benches_1: '1 Sitzbank', benches_2: '2 Sitzbänke',
     price: 'Preis',
@@ -424,6 +442,8 @@ const I18N = {
     length_cm: 'Length, cm',
     options: 'Options',
     backrest: 'Backrest',
+    backrest_with: 'With backrest',
+    backrest_without: 'Without backrest',
     bench_count: 'Number of benches',
     benches_0: 'No bench', benches_1: '1 bench', benches_2: '2 benches',
     price: 'Price',
@@ -457,6 +477,8 @@ const I18N = {
     length_cm: 'Lengte, cm',
     options: 'Opties',
     backrest: 'Rugleuning',
+    backrest_with: 'Met rugleuning',
+    backrest_without: 'Zonder rugleuning',
     bench_count: 'Aantal banken',
     benches_0: 'Geen bank', benches_1: '1 bank', benches_2: '2 banken',
     price: 'Prijs',
@@ -513,6 +535,7 @@ function applyLang(code){
   // re-render summary & bench chips (dynamic content)
   if (window.__updateSummary) window.__updateSummary();
   if (typeof renderBenches === 'function') renderBenches();
+  if (typeof renderBackrest === 'function') renderBackrest();
   if (typeof updatePrice === 'function') updatePrice();
   if (typeof updateAccordionValues === 'function') updateAccordionValues();
 }
@@ -565,15 +588,23 @@ function makeMatch(legStyle){
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
-       nativeLengths: SHOPIFY_LENGTHS,         // every Shopify length is native
+       nativeLengths: SHOPIFY_LENGTHS,
        label: 'W-Frame',
        tabletop: '89×9 cm',
        height: '≈75 cm',
        productHandle: 'picknicktisch-aus-massivem-douglasienholz',
-       hasBackrest: false,                    // Picknicktisch on site has no backrest
+       hasBackrest: true,                     // optional backrest available on W
        hasBenchChoice: false,                 // always 2 benches
-       legStyle: 'Aframe',                    // trapezoidal A-frame supports
-       match: makeMatch('Aframe') },
+       legStyle: 'W',                         // procedural integrated structure
+       // For W we use the procedural integrated frame; no separate bench legs.
+       match: (name, L) => ({
+         bench1:     name === `3planks_bench1_${L}`,
+         bench2:     name === `3planks_bench2_${L}`,
+         legs:       name === `W_legs_${L}`,    // procedural
+         benchlegs1: false,                     // integrated into legs
+         benchlegs2: false,
+         top:        name === `Table_top_${L}`,
+       }) },
   X: { lengths: SHOPIFY_LENGTHS,
        nativeLengths: SHOPIFY_LENGTHS,
        label: 'X-Frame',
@@ -768,6 +799,117 @@ function isLegMesh(o){
   const n1 = o.name || '';
   const n2 = (o.parent && o.parent.name) || '';
   return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2) || /^U_legs/i.test(n1) || /^U_legs/i.test(n2);
+}
+
+// W-Frame: ONE INTEGRATED metal structure per table end that supports BOTH
+// the tabletop and both bench seats. End-on silhouette is a "W" / "M". This
+// is the Picknicktisch product on the site — table and benches share legs.
+function buildWFrame(lengthCm){
+  const L = lengthCm / 100;
+  const TABLE_HALF_W   = 0.40;   // inner attachment to tabletop
+  const GROUND_HALF_W  = 0.22;   // narrow ground footprint between the two V's
+  const BENCH_OUTER_X  = 1.06;   // outer bench corner (where leg meets bench)
+  const TABLE_H        = 0.69;
+  const BENCH_H        = 0.40;
+  const INSET_Z        = 0.18;
+  const SLAB_H         = 0.10;   // slab vertical extent
+  const SLAB_T         = 0.030;  // sheet metal thickness along Z
+  const BAR_T          = 0.05;
+
+  const group = new THREE.Group();
+  group.name = `W_legs_${lengthCm}`;
+
+  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of zPositions){
+    // 4 angled slab segments forming the W/M outline
+    const points = [
+      [-BENCH_OUTER_X, BENCH_H],
+      [-GROUND_HALF_W, 0],
+      [-TABLE_HALF_W,  TABLE_H],
+      [ TABLE_HALF_W,  TABLE_H],
+      [ GROUND_HALF_W, 0],
+      [ BENCH_OUTER_X, BENCH_H],
+    ];
+    for (let i = 0; i < points.length - 1; i++){
+      // Skip the horizontal top segment between the two inner table corners —
+      // we'll do that with a dedicated top crossbar so its profile is square.
+      if (i === 2) continue;
+      const [x1, y1] = points[i];
+      const [x2, y2] = points[i + 1];
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(len, SLAB_H, SLAB_T),
+        makeMetalMaterial()
+      );
+      slab.position.set((x1+x2)/2, (y1+y2)/2, z);
+      slab.rotation.z = Math.atan2(dy, dx);
+      slab.castShadow = true; slab.receiveShadow = true;
+      group.add(slab);
+    }
+    // Top crossbar under the tabletop
+    const topBar = new THREE.Mesh(
+      new THREE.BoxGeometry(TABLE_HALF_W * 2, BAR_T, BAR_T * 1.6),
+      makeMetalMaterial()
+    );
+    topBar.position.set(0, TABLE_H - BAR_T/2, z);
+    topBar.castShadow = true; topBar.receiveShadow = true;
+    group.add(topBar);
+  }
+  return group;
+}
+
+// Procedural backrests for the W-Frame Picknicktisch — wooden plank + metal
+// brackets, one set per bench side. Wood material is cloned from the loaded
+// GLB so material+texture matches the bench planks.
+function buildBackrests(lengthCm){
+  const L = lengthCm / 100;
+  const BENCH_OUTER_X  = 1.06;
+  const BENCH_TOP_Y    = 0.44;
+  const PLANK_H        = 0.14;          // plank vertical span
+  const PLANK_T_X      = 0.025;         // plank thickness (X axis)
+  const REST_Y         = BENCH_TOP_Y + 0.20 + PLANK_H/2;  // plank centre
+  const BRACKET_W      = 0.04;
+  const BRACKET_T      = 0.025;
+  const PLANK_LEN      = L - 0.10;       // slightly inset from bench ends
+
+  const group = new THREE.Group();
+  group.name = `Backrest_W_${lengthCm}`;
+
+  for (const sideNum of [1, 2]){
+    const sx = sideNum === 1 ? -1 : 1;
+    const plankX = sx * BENCH_OUTER_X;
+    // Wooden plank — material will get the wood map applied in loadAll's
+    // material rewrite pass via .userData.isWood tagging.
+    const plank = new THREE.Mesh(
+      new THREE.BoxGeometry(PLANK_T_X, PLANK_H, PLANK_LEN),
+      new THREE.MeshStandardMaterial({
+        map: woodTex, color: 0xffffff, roughness: 0.72, metalness: 0.0,
+      })
+    );
+    plank.material.userData.isWood = true;
+    plank.position.set(plankX, REST_Y, 0);
+    plank.userData.benchSide = sx;
+    plank.userData.backrestSide = sideNum;
+    plank.castShadow = true; plank.receiveShadow = true;
+    group.add(plank);
+
+    // Two metal brackets connecting bench seat to backrest plank
+    const brZ = [-(L/2 - 0.25), (L/2 - 0.25)];
+    for (const bz of brZ){
+      const bracketH = REST_Y - BENCH_TOP_Y + PLANK_H/2 + 0.02;
+      const bracket = new THREE.Mesh(
+        new THREE.BoxGeometry(BRACKET_W, bracketH, BRACKET_T),
+        makeMetalMaterial()
+      );
+      bracket.position.set(plankX, BENCH_TOP_Y + bracketH/2, bz);
+      bracket.userData.benchSide = sx;
+      bracket.userData.backrestSide = sideNum;
+      bracket.castShadow = true; bracket.receiveShadow = true;
+      group.add(bracket);
+    }
+  }
+  return group;
 }
 
 // Procedurally builds a U-shaped frame: closed rectangular metal loops, one per
@@ -1023,6 +1165,18 @@ async function loadAll(){
   });
   scene.add(root);
 
+  // W-Frame uses a procedural INTEGRATED metal frame (one piece supports both
+  // table and benches — Picknicktisch product). The GLB's separate Aframe legs
+  // are not used for W. We also generate optional backrests for the W benches.
+  for (const L of SHOPIFY_LENGTHS){
+    const w = buildWFrame(L);
+    w.visible = false;
+    models.SET.add(w);
+    const br = buildBackrests(L);
+    br.visible = false;
+    models.SET.add(br);
+  }
+
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
@@ -1070,7 +1224,7 @@ function applyVisibility(){
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|W_legs|Backrest_W).*_\d+$/;
   root.traverse(o => {
     if (o.name && NAMED_VARIANT.test(o.name)){ o.visible = false; }
   });
@@ -1088,6 +1242,25 @@ function applyVisibility(){
     else if (r.benchlegs2) show = showBench2;
     if (show){ o.visible = true; }
   });
+
+  // Backrest (W-Frame only). Shown when the family supports it AND backOn=true.
+  // The whole group is one length-specific node (Backrest_W_<L>); individual
+  // bench-side planks inside are toggled by their userData.backrestSide.
+  if (fam.hasBackrest && backOn){
+    const want = `Backrest_W_${currentLength}`;
+    root.traverse(o => {
+      if (o.name === want){
+        o.visible = true;
+        // Hide per-bench-side planks/brackets when that bench is hidden
+        o.traverse(c => {
+          if (c.userData && c.userData.backrestSide != null){
+            const side = c.userData.backrestSide;
+            c.visible = (side === 1) ? showBench1 : showBench2;
+          }
+        });
+      }
+    });
+  }
 
   frameCameraToSelection();
   updateSummary();
@@ -1285,14 +1458,21 @@ function updateAccordionValues(){
   const frameVal = document.getElementById('accFrameValue');
   const lenVal   = document.getElementById('accLengthValue');
   const benchVal = document.getElementById('accBenchValue');
+  const backVal  = document.getElementById('accBackrestValue');
   if (frameVal) frameVal.textContent = (F && F.label) || currentFamily;
   if (lenVal)   lenVal.textContent   = currentLength + ' cm';
   if (benchVal) benchVal.textContent = t('benches_' + benchCount);
+  if (backVal)  backVal.textContent  = t(backOn ? 'backrest_with' : 'backrest_without');
 
   const accBench = document.getElementById('accBenches');
   if (accBench){
     accBench.hidden = !(F && F.hasBenchChoice);
     if (accBench.hidden) accBench.open = false;
+  }
+  const accBack = document.getElementById('accBackrest');
+  if (accBack){
+    accBack.hidden = !(F && F.hasBackrest);
+    if (accBack.hidden) accBack.open = false;
   }
 
   // Mirror the active-family icon into the Frame summary.
@@ -1327,6 +1507,7 @@ function setFamily(fam, force){
 
   renderLengths();
   renderBenches();
+  renderBackrest();
   applyVisibility();
   updateAccordionValues();
 }
@@ -1339,6 +1520,18 @@ function renderBenches(){
     b.className = 'chip' + (n===benchCount?' active':'');
     b.textContent = t('benches_' + n);
     b.onclick = () => { benchCount = n; renderBenches(); applyVisibility(); updateAccordionValues(); };
+    wrap.appendChild(b);
+  });
+}
+
+function renderBackrest(){
+  const wrap = document.getElementById('backrestChips'); if (!wrap) return;
+  wrap.innerHTML = '';
+  [false, true].forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (v===backOn?' active':'');
+    b.textContent = t(v ? 'backrest_with' : 'backrest_without');
+    b.onclick = () => { backOn = v; renderBackrest(); applyVisibility(); updateAccordionValues(); };
     wrap.appendChild(b);
   });
 }
