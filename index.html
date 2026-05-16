@@ -1054,18 +1054,21 @@ function buildWLegs(lengthCm){
 // X-Frame procedural TABLE legs only — two clean X-frames at the table ends.
 // Replaces the cluttered baked-in GLB X-legs so the silhouette matches the
 // actual product photo. Bench legs are produced separately by buildXBenchLegs.
-// X-Frame procedural TABLE legs — match U-Frame's profile (square 5.5cm beam)
-// and same overall table footprint dimensions for visual consistency.
-// Two crossing X-beams per table end, beams overshoot 2cm into the wood for
-// a flush joint.
+// X-Frame procedural TABLE legs — per user spec: 72cm wide × 70cm tall
+// X footprint, 10×10cm square beam cross-section.
 function buildXLegs(lengthCm){
   const L = lengthCm / 100;
-  const TABLE_X_ATTACH  = 0.40;        // X where beam meets table bottom (under the 89cm top)
-  const GROUND_HALF_W   = 0.40;        // X spread on the ground (same footprint as table top)
-  const TABLE_Y_BOTTOM  = 0.745;       // bottom of 9cm picknickset table
-  const INSET_Z         = 0.10;        // 10cm from each table end (matches U)
-  const BEAM            = 0.055;       // square cross-section 5.5×5.5cm (matches U)
+  const X_HALF_W        = 0.36;        // 72cm wide footprint
+  const X_HEIGHT        = 0.70;        // 70cm tall X structure
+  const TABLE_Y_BOTTOM  = 0.745;
+  const INSET_Z         = 0.10;
+  const BEAM            = 0.10;        // 10×10cm square profile
   const OVERSHOOT       = 0.02;
+
+  // Lift the X so its top sits flush with the table bottom (Y = TABLE_Y_BOTTOM).
+  // X bottom = TABLE_Y_BOTTOM - X_HEIGHT.
+  const Y_LOW  = TABLE_Y_BOTTOM - X_HEIGHT;
+  const Y_HIGH = TABLE_Y_BOTTOM;
 
   const group = new THREE.Group();
   group.name = `X_legs_${lengthCm}`;
@@ -1073,15 +1076,12 @@ function buildXLegs(lengthCm){
   function addBeam(g, x1, y1, x2, y2, z){
     const dx = x2 - x1, dy = y2 - y1;
     const baseLen = Math.hypot(dx, dy);
-    const ux = dx / baseLen, uy = dy / baseLen;
-    const len = baseLen + OVERSHOOT * 2;          // overshoot both ends (into ground + wood)
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
+    const len = baseLen + OVERSHOOT * 2;
     const beam = new THREE.Mesh(
       new THREE.BoxGeometry(len, BEAM, BEAM),
       makeMetalMaterial()
     );
-    beam.position.set(cx, cy, z);
+    beam.position.set((x1+x2)/2, (y1+y2)/2, z);
     beam.rotation.z = Math.atan2(dy, dx);
     beam.castShadow = true; beam.receiveShadow = true;
     g.add(beam);
@@ -1089,23 +1089,39 @@ function buildXLegs(lengthCm){
 
   const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
   for (const z of zPositions){
-    // Two crossing diagonals forming an X under the table
-    addBeam(group, -GROUND_HALF_W, 0, +TABLE_X_ATTACH, TABLE_Y_BOTTOM, z);
-    addBeam(group, +GROUND_HALF_W, 0, -TABLE_X_ATTACH, TABLE_Y_BOTTOM, z);
+    addBeam(group, -X_HALF_W, Y_LOW, +X_HALF_W, Y_HIGH, z);
+    addBeam(group, +X_HALF_W, Y_LOW, -X_HALF_W, Y_HIGH, z);
+    // Short vertical "feet" from the X bottom down to the ground (so the X
+    // doesn't float above the floor when X_HEIGHT < TABLE_Y_BOTTOM).
+    if (Y_LOW > 0.001){
+      for (const sx of [-1, +1]){
+        const foot = new THREE.Mesh(
+          new THREE.BoxGeometry(BEAM, Y_LOW + OVERSHOOT, BEAM),
+          makeMetalMaterial()
+        );
+        foot.position.set(sx * X_HALF_W, (Y_LOW + OVERSHOOT) / 2, z);
+        foot.castShadow = true; foot.receiveShadow = true;
+        group.add(foot);
+      }
+    }
   }
   return group;
 }
 
-// X-Frame procedural BENCH legs — small independent X-supports under each
-// bench end, same 5.5cm square profile as the table legs and U-Frame.
+// X-Frame procedural BENCH legs — small X-supports under each bench end,
+// 8×8cm profile (per user spec). Bench footprint scaled proportionally.
 function buildXBenchLegs(lengthCm){
   const L = lengthCm / 100;
-  const BENCH_Y_BOTTOM  = 0.355;       // bottom of 9cm picknickset bench seat
+  const BENCH_Y_BOTTOM  = 0.355;       // bottom of 9cm picknickset bench
+  const X_HEIGHT        = 0.36;        // bench X height ≈ bench seat clearance
+  const BENCH_X         = 0.86;        // bench centre
+  const X_HALF_W        = 0.18;        // 36cm wide X footprint per bench
   const INSET_Z         = 0.10;
-  const BEAM            = 0.045;       // slightly thinner than table beam (matches U bench)
-  const BENCH_X         = 0.86;        // bench centre (matches picknickset bench mesh)
-  const BENCH_HALF_W    = 0.20;        // half-width of bench footprint
+  const BEAM            = 0.08;        // 8×8cm square profile
   const OVERSHOOT       = 0.02;
+
+  const Y_LOW  = BENCH_Y_BOTTOM - X_HEIGHT;
+  const Y_HIGH = BENCH_Y_BOTTOM;
 
   const group = new THREE.Group();
   group.name = `X_bench_legs_${lengthCm}`;
@@ -1118,7 +1134,7 @@ function buildXBenchLegs(lengthCm){
       new THREE.BoxGeometry(len, BEAM, BEAM),
       makeMetalMaterial()
     );
-    beam.position.set((x1 + x2) / 2, (y1 + y2) / 2, z);
+    beam.position.set((x1+x2)/2, (y1+y2)/2, z);
     beam.rotation.z = Math.atan2(dy, dx);
     beam.userData.isBenchLeg = true;
     beam.userData.benchSide = side;
@@ -1130,9 +1146,22 @@ function buildXBenchLegs(lengthCm){
   for (const bx of [-BENCH_X, +BENCH_X]){
     const sideSign = Math.sign(bx);
     for (const bz of benchZ){
-      // Two crossing diagonals forming a small X under this bench end
-      addBeam(group, bx - BENCH_HALF_W, 0, bx + BENCH_HALF_W, BENCH_Y_BOTTOM, bz, sideSign);
-      addBeam(group, bx + BENCH_HALF_W, 0, bx - BENCH_HALF_W, BENCH_Y_BOTTOM, bz, sideSign);
+      addBeam(group, bx - X_HALF_W, Y_LOW, bx + X_HALF_W, Y_HIGH, bz, sideSign);
+      addBeam(group, bx + X_HALF_W, Y_LOW, bx - X_HALF_W, Y_HIGH, bz, sideSign);
+      // Short vertical feet down to the ground
+      if (Y_LOW > 0.001){
+        for (const sx of [-1, +1]){
+          const foot = new THREE.Mesh(
+            new THREE.BoxGeometry(BEAM, Y_LOW + OVERSHOOT, BEAM),
+            makeMetalMaterial()
+          );
+          foot.position.set(bx + sx * X_HALF_W, (Y_LOW + OVERSHOOT) / 2, bz);
+          foot.userData.isBenchLeg = true;
+          foot.userData.benchSide = sideSign;
+          foot.castShadow = true; foot.receiveShadow = true;
+          group.add(foot);
+        }
+      }
     }
   }
   return group;
@@ -1194,8 +1223,12 @@ async function loadAll(){
   // Extract real W-leg meshes from angle.glb into models.SET. Each leg is
   // wrapped in a Group placed at the leg's geometric world centre so that
   // scaling the wrapper (scale.z) stays symmetric and the V-frames don't
-  // drift sideways.
-  const W_LEG_Y_OFFSET = 0.045;
+  // drift sideways. We use a small NEGATIVE Y offset: the outer V-tip would
+  // poke ABOVE the picknickset bench top if we lifted the leg, so we drop
+  // it slightly so the outer-V tip stays INSIDE the bench thickness (between
+  // bench bottom 0.355 and top 0.445). The inner-V tip lands a few mm below
+  // the table bottom — invisible from outside.
+  const W_LEG_Y_OFFSET = -0.02;
   window.__wLegs = {};
   const legsToMove = [];
   wRoot.traverse(o => {
