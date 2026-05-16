@@ -13,8 +13,9 @@
 <link rel="preload" as="fetch" crossorigin href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/xset.glb">
 <link rel="preload" as="image" href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/wood.jpg" crossorigin>
 
-<!-- model-viewer for in-browser AR (iOS Quick Look / Android Scene Viewer / WebXR) -->
-<script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
+<!-- model-viewer loaded LAZILY on demand to avoid racing the importmap.
+     We inject the script in JS when the user clicks "View in AR". -->
+<link rel="dns-prefetch" href="https://unpkg.com">
 <style>
   :root{
     --bg:#f3f1ec; --bg2:#e9e5dd; --ink:#1c1a16; --muted:#6b6660;
@@ -1137,10 +1138,28 @@ function buildExportScene(){
   });
   return out;
 }
+// Lazily inject model-viewer ONLY when the user actually clicks AR.
+// Loading it eagerly would race the importmap and break Three.js resolution.
+let __mvLoadPromise = null;
+function ensureModelViewerLoaded(){
+  if (customElements.get('model-viewer')) return Promise.resolve();
+  if (__mvLoadPromise) return __mvLoadPromise;
+  __mvLoadPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.src = 'https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js';
+    s.onload = () => customElements.whenDefined('model-viewer').then(res, rej);
+    s.onerror = (e) => { __mvLoadPromise = null; rej(e); };
+    document.head.appendChild(s);
+  });
+  return __mvLoadPromise;
+}
+
 async function openAR(){
   const btn = document.getElementById('arBtn');
   btn.disabled = true;
   try {
+    await ensureModelViewerLoaded();
     const exporter = new GLTFExporter();
     const exportScene = buildExportScene();
     const result = await new Promise((res, rej) => {
