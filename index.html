@@ -35,6 +35,39 @@
   .sub{font-size:12px;color:var(--muted);margin-bottom:12px}
   .group{display:flex;flex-direction:column;gap:8px}
   .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:2px}
+
+  /* Accordion list — Bogade-style collapsible options.
+     Each row: round icon + title/value + chevron. Closed by default. */
+  .acc-list{display:flex;flex-direction:column;margin:0 -22px}
+  .acc{border-top:1px solid var(--line);background:#fff}
+  .acc:last-child{border-bottom:1px solid var(--line)}
+  .acc[hidden]{display:none}
+  .acc > summary{
+    list-style:none;cursor:pointer;user-select:none;
+    display:flex;align-items:center;gap:14px;
+    padding:14px 22px;outline:none;
+  }
+  .acc > summary::-webkit-details-marker{display:none}
+  .acc > summary::marker{display:none}
+  .acc > summary:hover{background:#fafaf8}
+  .acc-icon{
+    flex:0 0 44px;width:44px;height:44px;border-radius:50%;
+    border:1px solid var(--line);background:#fff;
+    display:flex;align-items:center;justify-content:center;color:var(--ink);
+  }
+  .acc-icon svg{width:24px;height:24px;display:block}
+  .acc-text{flex:1;min-width:0}
+  .acc-title{font-size:15px;font-weight:600;color:var(--ink);line-height:1.2}
+  .acc-value{font-size:12px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
+  .acc-chev{flex:0 0 14px;color:var(--muted);transition:transform .2s ease;font-size:14px;line-height:1}
+  .acc[open] > summary .acc-chev{transform:rotate(180deg)}
+  .acc[open] > summary{
+    box-shadow:inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent);
+    border-radius:0 6px 6px 0;
+  }
+  .acc-body{padding:6px 22px 18px;display:flex;flex-direction:column;gap:10px}
+  .acc-body .frames{margin-top:2px}
+  .acc-body .chips{gap:6px}
   .chips{display:flex;flex-wrap:wrap;gap:6px}
   .chip{padding:8px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;color:var(--ink);transition:.12s ease}
   .chip:hover{border-color:#bbb}
@@ -202,62 +235,83 @@
       <div class="sub" data-i18n="subtitle">Table + benches. Assembly fits the selected length.</div>
     </div>
 
-    <div class="group">
-      <div class="lbl" data-i18n="frame">Frame</div>
-      <div class="frames" id="frames">
-        <button class="frame active" data-fam="W">
-          <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
-          <span class="nm">W-Frame</span>
-          <span class="sz">160–400 cm</span>
-        </button>
-        <button class="frame" data-fam="X">
-          <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 L26 36"/><path d="M26 13 L14 36"/><path d="M50 13 L38 36"/><path d="M38 13 L50 36"/><path d="M16 24 H48"/></g></svg>
-          <span class="nm">X-Frame</span>
-          <span class="sz">160–400 cm</span>
-        </button>
-        <button class="frame" data-fam="U">
-          <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 V36"/><path d="M22 13 V36"/><path d="M14 36 H22"/><path d="M42 13 V36"/><path d="M50 13 V36"/><path d="M42 36 H50"/></g></svg>
-          <span class="nm">U-Frame</span>
-          <span class="sz">160–400 cm</span>
-        </button>
-      </div>
+    <!-- Accordion-style options list (Bogade pattern). All rows closed by default;
+         each header shows the current selection so the user sees the full config
+         at a glance without expanding. -->
+    <div class="acc-list">
+
+      <details class="acc" id="accFrame">
+        <summary>
+          <span class="acc-icon" id="accFrameIcon">
+            <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
+          </span>
+          <span class="acc-text">
+            <span class="acc-title" data-i18n="frame">Frame</span>
+            <span class="acc-value" id="accFrameValue">W-Frame</span>
+          </span>
+          <span class="acc-chev">▾</span>
+        </summary>
+        <div class="acc-body">
+          <div class="frames" id="frames">
+            <button class="frame active" data-fam="W">
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
+              <span class="nm">W-Frame</span>
+              <span class="sz">160–400 cm</span>
+            </button>
+            <button class="frame" data-fam="X">
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 L26 36"/><path d="M26 13 L14 36"/><path d="M50 13 L38 36"/><path d="M38 13 L50 36"/><path d="M16 24 H48"/></g></svg>
+              <span class="nm">X-Frame</span>
+              <span class="sz">160–400 cm</span>
+            </button>
+            <button class="frame" data-fam="U">
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 V36"/><path d="M22 13 V36"/><path d="M14 36 H22"/><path d="M42 13 V36"/><path d="M50 13 V36"/><path d="M42 36 H50"/></g></svg>
+              <span class="nm">U-Frame</span>
+              <span class="sz">160–400 cm</span>
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details class="acc" id="accLength">
+        <summary>
+          <span class="acc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M5 8v8"/><path d="M19 8v8"/></svg>
+          </span>
+          <span class="acc-text">
+            <span class="acc-title" data-i18n="length_cm">Length</span>
+            <span class="acc-value" id="accLengthValue">200 cm</span>
+          </span>
+          <span class="acc-chev">▾</span>
+        </summary>
+        <div class="acc-body">
+          <div class="chips" id="lengths"></div>
+        </div>
+      </details>
+
+      <details class="acc" id="accBenches" hidden>
+        <summary>
+          <span class="acc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="3" rx="0.5"/><path d="M6 13v6"/><path d="M18 13v6"/></svg>
+          </span>
+          <span class="acc-text">
+            <span class="acc-title" data-i18n="bench_count">Number of benches</span>
+            <span class="acc-value" id="accBenchValue">2 benches</span>
+          </span>
+          <span class="acc-chev">▾</span>
+        </summary>
+        <div class="acc-body">
+          <div class="chips" id="benchChips"></div>
+        </div>
+      </details>
+
     </div>
 
-    <div class="group">
-      <div class="lbl" data-i18n="length_cm">Length, cm</div>
-      <div class="chips" id="lengths"></div>
-    </div>
-
-    <div class="group" id="optionsGroup">
-      <div class="lbl" data-i18n="options">Options</div>
-      <label class="row" id="rowBackrest" hidden>
-        <span data-i18n="backrest">Backrest</span>
-        <span class="switch"><input type="checkbox" id="backOn" checked><span class="slider"></span></span>
-      </label>
-      <div class="row" id="rowBenches" style="flex-direction:column;align-items:stretch;gap:8px" hidden>
-        <span data-i18n="bench_count">Anzahl der Bänke</span>
-        <div class="chips" id="benchChips"></div>
-      </div>
-    </div>
-
-    <!--
-      Wood tone + leg color pickers removed at customer request — the actual
-      Shopify product has no such options, so the configurator should not offer
-      them. The hidden defaults below still drive the material so the renderer
-      keeps working: natural wood tone (#ffffff multiplier) and black legs
-      (#0d0d0d). Re-enable by removing `hidden` from the wrappers.
-    -->
-    <div class="group" id="woodGroup" hidden>
-      <div class="stones" id="stains">
-        <div class="swatch active" data-tint="ffffff" data-i18n-title="natural" title="Natural"></div>
-      </div>
-    </div>
-
-    <div class="group" id="legGroup" hidden>
-      <div class="stones" id="legColors">
-        <div class="swatch active" data-leg="0d0d0d" data-i18n-title="black" title="Black"></div>
-      </div>
-    </div>
+    <!-- Hidden, kept for JS compatibility: backrest is always-on for W and not
+         a customer-facing choice. Wood tone and leg color likewise locked. -->
+    <label id="rowBackrest" hidden><input type="checkbox" id="backOn" checked></label>
+    <span id="rowBenches" hidden></span>
+    <div id="stains" hidden><div class="swatch active" data-tint="ffffff" data-i18n-title="natural"></div></div>
+    <div id="legColors" hidden><div class="swatch active" data-leg="0d0d0d" data-i18n-title="black"></div></div>
 
     <div class="summary" id="summary"></div>
 
@@ -427,6 +481,7 @@ function applyLang(code){
   if (window.__updateSummary) window.__updateSummary();
   if (typeof renderBenches === 'function') renderBenches();
   if (typeof updatePrice === 'function') updatePrice();
+  if (typeof updateAccordionValues === 'function') updateAccordionValues();
 }
 
 // === Exit / return navigation ===
@@ -1043,9 +1098,36 @@ function renderLengths(){
     const b = document.createElement('button');
     b.className = 'chip' + (L===currentLength?' active':'');
     b.textContent = L;
-    b.onclick = () => { currentLength = L; renderLengths(); applyVisibility(); };
+    b.onclick = () => { currentLength = L; renderLengths(); applyVisibility(); updateAccordionValues(); };
     wrap.appendChild(b);
   });
+}
+
+// Sync the closed-summary headers to the current configuration so the user
+// can see the picked values without expanding each row. Also swap the Frame
+// icon to match the selected family.
+function updateAccordionValues(){
+  const F = FAMILIES[currentFamily];
+  const frameVal = document.getElementById('accFrameValue');
+  const lenVal   = document.getElementById('accLengthValue');
+  const benchVal = document.getElementById('accBenchValue');
+  if (frameVal) frameVal.textContent = (F && F.label) || currentFamily;
+  if (lenVal)   lenVal.textContent   = currentLength + ' cm';
+  if (benchVal) benchVal.textContent = t('benches_' + benchCount);
+
+  const accBench = document.getElementById('accBenches');
+  if (accBench){
+    accBench.hidden = !(F && F.hasBenchChoice);
+    if (accBench.hidden) accBench.open = false;
+  }
+
+  // Mirror the active-family icon into the Frame summary.
+  const tile = document.querySelector(`.frame[data-fam="${currentFamily}"] svg`);
+  const slot = document.getElementById('accFrameIcon');
+  if (tile && slot){
+    slot.innerHTML = '';
+    slot.appendChild(tile.cloneNode(true));
+  }
 }
 
 function setFamily(fam, force){
@@ -1072,6 +1154,7 @@ function setFamily(fam, force){
   renderLengths();
   renderBenches();
   applyVisibility();
+  updateAccordionValues();
 }
 
 function renderBenches(){
@@ -1081,7 +1164,7 @@ function renderBenches(){
     const b = document.createElement('button');
     b.className = 'chip' + (n===benchCount?' active':'');
     b.textContent = t('benches_' + n);
-    b.onclick = () => { benchCount = n; renderBenches(); applyVisibility(); };
+    b.onclick = () => { benchCount = n; renderBenches(); applyVisibility(); updateAccordionValues(); };
     wrap.appendChild(b);
   });
 }
