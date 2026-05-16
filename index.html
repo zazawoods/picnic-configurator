@@ -579,7 +579,7 @@ const FAMILIES = {
        match: (name, L) => ({
          backrest: name === `Backrest_X_${L}`,
          bench:    name === `2benchplanks_X_${L}`,
-         legs:     name === `Table_legs_X_${L}`,
+         legs:     name === `X_legs_${L}`,                  // procedural — built per Shopify length
          top:      name === `Table_top_X_${L}`,
        })},
   U: { lengths: SHOPIFY_LENGTHS,
@@ -898,40 +898,58 @@ function buildWLegs(lengthCm){
   return group;
 }
 
-// X-Frame bench legs — the GLB has X-legs for the table only. We add small
-// procedural X-supports under each bench end so benches don't float.
-function buildXBenchLegs(lengthCm){
+// X-Frame procedural legs — two clean X-frames at the table ends with bench
+// arms extending outward at bench height. Replaces the cluttered baked-in GLB
+// X-legs so the silhouette matches the actual product photo (photo 3).
+function buildXLegs(lengthCm){
   const L = lengthCm / 100;
-  const BENCH_H  = 0.42;
-  const INSET_Z  = 0.16;
-  const BAR_T    = 0.04;
-  const X_HALF_W = 0.18;               // X footprint half-width
-  const BENCH_X  = 0.66;               // bench centre offset from table centre
-  const SLAB_D   = BAR_T * 1.5;
+  const TABLE_HALF_W = 0.445;          // tabletop 89cm wide
+  const GROUND_HALF_W = 0.20;          // narrow ground footprint
+  const TABLE_H = 0.70;
+  const BENCH_H = 0.42;
+  const BENCH_REACH = 0.48;            // bench extends outward from table edge
+  const INSET_Z = 0.16;
+  const SLAB_W = 0.075;                // X-arm width
+  const SLAB_T = 0.030;                // sheet thickness
+  const BAR_T = 0.045;
 
   const group = new THREE.Group();
-  group.name = `X_bench_legs_${lengthCm}`;
+  group.name = `X_legs_${lengthCm}`;
 
-  const benchZ = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
-  const benchX = [-BENCH_X, BENCH_X];
+  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of zPositions){
+    const parts = [];
 
-  for (const bx of benchX){
-    for (const bz of benchZ){
-      const len = Math.hypot(X_HALF_W*2, BENCH_H);
-      const ang = Math.atan2(BENCH_H, X_HALF_W*2);
-      for (const sign of [1, -1]){
-        const d = new THREE.Mesh(
-          new THREE.BoxGeometry(len, BAR_T, SLAB_D),
-          makeMetalMaterial()
-        );
-        d.position.set(bx, BENCH_H/2, bz);
-        d.rotation.z = sign * ang;
-        d.userData.isBenchLeg = true;
-        d.userData.benchSide = Math.sign(bx);
-        d.castShadow = true; d.receiveShadow = true;
-        group.add(d);
-      }
+    // Two crossing diagonals forming the X (end-on view)
+    // Diagonal 1: bottom-left to top-right
+    // Diagonal 2: bottom-right to top-left
+    for (const dir of [1, -1]){
+      const x1 = dir * GROUND_HALF_W,  y1 = 0;
+      const x2 = -dir * TABLE_HALF_W,  y2 = TABLE_H;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(len, SLAB_W, SLAB_T),
+        makeMetalMaterial()
+      );
+      arm.position.set((x1+x2)/2, (y1+y2)/2, z);
+      arm.rotation.z = Math.atan2(dy, dx);
+      parts.push(arm);
     }
+
+    // Horizontal bench arms (sheet-metal arms supporting the bench planks)
+    for (const side of [-1, 1]){
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(BENCH_REACH, BAR_T, BAR_T * 1.5),
+        makeMetalMaterial()
+      );
+      arm.position.set(side * (TABLE_HALF_W + BENCH_REACH/2 - 0.04), BENCH_H, z);
+      arm.userData.isBenchLeg = true;
+      arm.userData.benchSide = side;
+      parts.push(arm);
+    }
+
+    parts.forEach(m => { m.castShadow = true; m.receiveShadow = true; group.add(m); });
   }
   return group;
 }
@@ -987,10 +1005,13 @@ async function loadAll(){
     w.visible = false;
     models.W.add(w);
   }
-  // X-frame: NO procedural bench legs. The GLB's Table_legs_X already spans
-  // the full bench-to-bench width — adding small extra Xs under each bench
-  // makes the result look cluttered vs the real product photo. Bench seats
-  // attach directly to the GLB X-legs as in the actual furniture.
+  // X-frame: procedural clean X-legs at each table end + bench arms (matches
+  // the real product photo). Replaces the cluttered baked-in GLB X-legs.
+  for (const L of FAMILIES.X.lengths){
+    const x = buildXLegs(L);
+    x.visible = false;
+    models.X.add(x);
+  }
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
@@ -1042,7 +1063,7 @@ function applyVisibility(){
   // LEAF nodes whose name ends with `_<digits>` — parent group nodes (like
   // "2benchplanks_X" with no length suffix) must stay visible because their
   // descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|2benchplanks|Backrest|Table_legs|U_legs|W_legs|X_bench_legs).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|2benchplanks|Backrest|Table_legs|U_legs|W_legs|X_legs).*_\d+$/;
   root.traverse(o => {
     if (!o.name || !NAMED_VARIANT.test(o.name)) return;
     o.visible = false;
@@ -1076,13 +1097,13 @@ function applyVisibility(){
     else if (r.backrest) show = shouldShowBack;
     else if (r.legs){
       if (currentFamily === 'U' && /^U_legs_/.test(o.name)) show = true;
-      else if (currentFamily === 'X' && (/^Table_legs_X_/.test(o.name) || /^X_bench_legs_/.test(o.name))) show = true;
+      else if (currentFamily === 'X' && /^X_legs_/.test(o.name)) show = true;
       else if (currentFamily === 'W' && /^W_legs_/.test(o.name)) show = true;
     }
     if (show){
       o.visible = true;
-      // Procedural legs (U/W/X-bench) are built per-length, don't scale them
-      if (!/^U_legs_|^W_legs_|^X_bench_legs_/.test(o.name)) o.scale.z = scaleZ;
+      // Procedural legs (U/W/X) are built per-length, don't scale them
+      if (!/^U_legs_|^W_legs_|^X_legs_/.test(o.name)) o.scale.z = scaleZ;
       // Apply / remove clipping for benches & backrests
       if (o.isMesh && o.material){
         if (r.bench)         o.material.clippingPlanes = benchClipPlanes;
