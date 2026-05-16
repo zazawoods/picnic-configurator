@@ -813,6 +813,8 @@ function buildULegs(lengthCm){
   }
 
   // 2) Bench legs — four small closed rectangles, one at each end of each bench.
+  //    Each mesh is tagged with `benchSide` so applyVisibility can hide one side
+  //    when the user picks "1 bench" or "no bench".
   const benchZ = tableZ;
   const benchX = [-BENCH_OFFSET_X, BENCH_OFFSET_X];
   for (const bx of benchX){
@@ -820,6 +822,8 @@ function buildULegs(lengthCm){
       const sub = closedFrame(bz, BENCH_LEG_HALF_W, BENCH_H, POST_W * 0.8);
       sub.forEach(m => {
         m.position.x += bx;
+        m.userData.isBenchLeg = true;
+        m.userData.benchSide = Math.sign(bx);
         m.castShadow = true; m.receiveShadow = true;
         group.add(m);
       });
@@ -923,6 +927,8 @@ function buildXBenchLegs(lengthCm){
         );
         d.position.set(bx, BENCH_H/2, bz);
         d.rotation.z = sign * ang;
+        d.userData.isBenchLeg = true;
+        d.userData.benchSide = Math.sign(bx);
         d.castShadow = true; d.receiveShadow = true;
         group.add(d);
       }
@@ -1100,6 +1106,17 @@ function applyVisibility(){
       }
     }
   });
+
+  // Procedural bench-leg side filter — when the user picks "1 bench" we keep
+  // the bench on x > 0 (matches benchClipPlanes). For "no bench" we hide all.
+  if (fam.hasBenchChoice){
+    root.traverse(o => {
+      if (o.isMesh && o.userData && o.userData.isBenchLeg){
+        if (benchCount === 0) o.visible = false;
+        else if (benchCount === 1) o.visible = (o.userData.benchSide > 0);
+      }
+    });
+  }
 
   frameCameraToSelection();
   updateSummary();
