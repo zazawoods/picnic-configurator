@@ -73,7 +73,7 @@ http.createServer((req, res) => {
       // and lets the configurator be embedded as an iframe from the Shopify storefront,
       // Shopify admin preview and the myshopify.com staging domains.
       'Content-Security-Policy': ext === '.html'
-        ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src 'self' https://unpkg.com https://www.gstatic.com https://raw.githubusercontent.com; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com https://*.shopifyapps.com https://*.shopifypreview.com https://*.shopify-preview.com https://zazawoods.de https://*.zazawoods.de https://zazawoods.com https://*.zazawoods.com; base-uri 'self'"
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src 'self' blob: https://unpkg.com https://www.gstatic.com https://raw.githubusercontent.com; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com https://*.shopifyapps.com https://*.shopifypreview.com https://*.shopify-preview.com https://zazawoods.de https://*.zazawoods.de https://zazawoods.com https://*.zazawoods.com; base-uri 'self'"
         : undefined,
     };
     // Drop undefined CSP for non-HTML

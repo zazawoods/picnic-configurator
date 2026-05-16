@@ -12,6 +12,9 @@
 <link rel="preload" as="fetch" crossorigin href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/angle.glb">
 <link rel="preload" as="fetch" crossorigin href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/xset.glb">
 <link rel="preload" as="image" href="https://raw.githubusercontent.com/zazawoods/picnic-configurator/main/wood.jpg" crossorigin>
+
+<!-- model-viewer for in-browser AR (iOS Quick Look / Android Scene Viewer / WebXR) -->
+<script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
 <style>
   :root{
     --bg:#f3f1ec; --bg2:#e9e5dd; --ink:#1c1a16; --muted:#6b6660;
@@ -85,6 +88,11 @@
   .toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);background:rgba(28,26,22,.92);color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;backdrop-filter:blur(8px);z-index:30;transition:opacity .3s ease,transform .3s ease;opacity:0;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
   .toast[hidden]{display:none}
+  .ar-modal{position:absolute;inset:0;background:#f3f1ec;z-index:40;display:flex;flex-direction:column}
+  .ar-modal[hidden]{display:none}
+  .ar-close{position:absolute;top:14px;right:14px;width:38px;height:38px;border:0;border-radius:50%;background:#fff;color:#1c1a16;font-size:22px;cursor:pointer;z-index:2;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+  .ar-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);max-width:80%;text-align:center;background:rgba(255,255,255,.92);color:var(--ink);padding:10px 16px;border-radius:12px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  model-viewer{--poster-color:transparent}
   .topleft{position:absolute;left:16px;top:16px;display:flex;gap:6px;z-index:2}
   /* Language switcher */
   .langs{display:inline-flex;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -94,12 +102,36 @@
   .langbtn svg{width:14px;height:10px;display:block;border-radius:1px;box-shadow:0 0 0 0.5px rgba(0,0,0,.1)}
   @media (max-width:760px){
     #app{flex-direction:column}
-    #panel{width:100%;border-left:0;border-top:1px solid var(--line);max-height:60vh}
+    #panel{
+      width:100%;border-left:0;border-top:1px solid var(--line);
+      max-height:62vh;padding:18px 18px 24px;gap:18px;
+      border-radius:18px 18px 0 0;margin-top:-12px;position:relative;z-index:1;
+      box-shadow:0 -8px 24px rgba(0,0,0,.06)
+    }
+    /* Subtle handle so users intuit it's a sheet */
+    #panel::before{
+      content:'';position:absolute;top:7px;left:50%;transform:translateX(-50%);
+      width:42px;height:4px;background:rgba(0,0,0,.18);border-radius:999px;
+    }
     #stage{flex:1 1 40vh;min-height:40vh}
-    .toolbar{top:8px;right:8px;gap:4px}
+    .toolbar{top:8px;right:8px;gap:4px;max-width:calc(100% - 130px)}
     .topleft{top:8px;left:8px}
-    .langbtn{padding:5px 7px;font-size:11px}
+    .langbtn{padding:6px 8px;font-size:11px}
+    .langbtn svg{width:13px;height:9px}
+    .tbtn{padding:6px 9px;font-size:11px}
+    .tbtn svg{width:11px;height:11px}
     .hud{display:none}
+    .frames{grid-template-columns:repeat(3,1fr);gap:6px}
+    .frame{padding:10px 4px}
+    .frame svg{width:58px;height:36px}
+    .frame .nm{font-size:12px}
+    .frame .sz{font-size:10px}
+    /* Bigger touch-targets for chips */
+    .chip{padding:10px 14px;font-size:14px;min-height:36px}
+    .swatch{min-height:38px}
+    .row{padding:12px 14px}
+    .btn{padding:15px;font-size:15px}
+    .price-amount{font-size:20px}
   }
 </style>
 </head>
@@ -136,11 +168,24 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         <span data-i18n="share">Teilen</span>
       </button>
+      <button class="tbtn" id="arBtn" hidden title="View in AR">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <span data-i18n="view_in_ar">In AR ansehen</span>
+      </button>
     </div>
     <div class="toast" id="toast" hidden></div>
 
     <div class="hud" id="hud">
       <kbd data-i18n="hud_lmb">LMB</kbd> <span data-i18n="hud_rotate">rotate</span> · <kbd data-i18n="hud_wheel">wheel</kbd> <span data-i18n="hud_zoom">zoom</span> · <kbd data-i18n="hud_rmb">RMB</kbd> <span data-i18n="hud_pan">pan</span>
+    </div>
+    <div class="ar-modal" id="arModal" hidden>
+      <button class="ar-close" id="arClose" aria-label="Close">×</button>
+      <model-viewer id="arViewer" ar ar-modes="webxr scene-viewer quick-look"
+        camera-controls touch-action="pan-y"
+        environment-image="neutral" shadow-intensity="0.7"
+        style="width:100%;height:100%;background:#f3f1ec;"
+        loading="eager"></model-viewer>
+      <div class="ar-hint" data-i18n="ar_hint">Tippen Sie auf das AR-Symbol, um den Tisch in Ihrem Raum zu sehen.</div>
     </div>
     <div class="loading" id="loading">
       <svg class="icon pulse" viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
@@ -230,7 +275,8 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three/examples/jsm/utils/BufferGeometryUtils": "https://unpkg.com/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js"
   }
 }
 </script>
@@ -241,6 +287,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 // === i18n ===
 const I18N = {
@@ -262,6 +309,9 @@ const I18N = {
     price: 'Preis',
     share: 'Teilen',
     share_copied: 'Link kopiert',
+    view_in_ar: 'In AR ansehen',
+    ar_hint: 'Tippen Sie auf das AR-Symbol, um den Tisch in Ihrem Garten zu sehen.',
+    ar_unsupported: 'AR wird auf diesem Gerät nicht unterstützt.',
     wood_tone: 'Holzfarbe',
     natural: 'Natur', oak: 'Eiche', walnut: 'Nussbaum', smoked: 'Geräuchert',
     leg_color: 'Gestellfarbe',
@@ -292,6 +342,9 @@ const I18N = {
     price: 'Price',
     share: 'Share',
     share_copied: 'Link copied',
+    view_in_ar: 'View in AR',
+    ar_hint: 'Tap the AR icon to see the table in your garden.',
+    ar_unsupported: 'AR is not supported on this device.',
     wood_tone: 'Wood tone',
     natural: 'Natural', oak: 'Oak', walnut: 'Walnut', smoked: 'Smoked',
     leg_color: 'Leg color',
@@ -322,6 +375,9 @@ const I18N = {
     price: 'Prijs',
     share: 'Delen',
     share_copied: 'Link gekopieerd',
+    view_in_ar: 'In AR bekijken',
+    ar_hint: 'Tik op het AR-icoon om de tafel in uw tuin te zien.',
+    ar_unsupported: 'AR wordt op dit apparaat niet ondersteund.',
     wood_tone: 'Houtkleur',
     natural: 'Naturel', oak: 'Eiken', walnut: 'Notenhout', smoked: 'Gerookt',
     leg_color: 'Framekleur',
@@ -1047,6 +1103,69 @@ function showToast(text){
     setTimeout(() => el.hidden = true, 300);
   }, 1800);
 }
+// AR — show button only on devices that support AR (Quick Look / Scene Viewer / WebXR)
+function isLikelyAR(){
+  const ua = navigator.userAgent || '';
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+}
+if (isLikelyAR()){
+  document.getElementById('arBtn').hidden = false;
+}
+let __arBlobUrl = null;
+function buildExportScene(){
+  // Clone only currently-visible meshes into a fresh scene, so the export captures
+  // exactly what the user sees right now (right family + length + benches).
+  const out = new THREE.Scene();
+  const root = rootForFamily(currentFamily);
+  if (!root) return out;
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!o.isMesh || !o.visible) return;
+    // Skip children that are hidden via ancestor invisibility
+    let p = o, v = true;
+    while (p){ if (p.visible === false){ v = false; break; } p = p.parent; }
+    if (!v) return;
+    const m = o.clone();
+    m.geometry = o.geometry.clone();
+    m.material = o.material.clone();
+    // Apply parent's world matrix so positions/scales survive the export
+    o.updateWorldMatrix(true, false);
+    m.matrix.copy(o.matrixWorld);
+    m.matrix.decompose(m.position, m.quaternion, m.scale);
+    m.matrixAutoUpdate = true;
+    out.add(m);
+  });
+  return out;
+}
+async function openAR(){
+  const btn = document.getElementById('arBtn');
+  btn.disabled = true;
+  try {
+    const exporter = new GLTFExporter();
+    const exportScene = buildExportScene();
+    const result = await new Promise((res, rej) => {
+      exporter.parse(exportScene, res, rej, { binary: true });
+    });
+    if (__arBlobUrl) URL.revokeObjectURL(__arBlobUrl);
+    const blob = new Blob([result], { type: 'model/gltf-binary' });
+    __arBlobUrl = URL.createObjectURL(blob);
+    const mv = document.getElementById('arViewer');
+    mv.setAttribute('src', __arBlobUrl);
+    // ios-src ideally points to a .usdz; we don't have one — model-viewer's Quick Look
+    // fallback will use the GLB as a best-effort preview on iOS.
+    document.getElementById('arModal').hidden = false;
+  } catch (e) {
+    console.warn('AR export failed:', e);
+    showToast(t('ar_unsupported'));
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById('arBtn').addEventListener('click', openAR);
+document.getElementById('arClose').addEventListener('click', () => {
+  document.getElementById('arModal').hidden = true;
+});
+
 document.getElementById('shareBtn').addEventListener('click', () => {
   const cfg = getConfig();
   const url = new URL(location.href);
