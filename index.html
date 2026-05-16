@@ -254,17 +254,50 @@
         <div class="acc-body">
           <div class="frames" id="frames">
             <button class="frame active" data-fam="W">
-              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="14" width="52" height="3"/><path d="M14 17 L20 36"/><path d="M50 17 L44 36"/><path d="M16 28 H48"/></g></svg>
+              <!-- W-Frame silhouette: tabletop + two trapezoidal sheet-metal supports
+                   (wider at top, narrow at ground) with bench arms — matches photo 2. -->
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="11" width="52" height="3"/>
+                <path d="M16 14 L26 34"/>
+                <path d="M26 34 L30 34"/>
+                <path d="M30 34 L20 14"/>
+                <path d="M48 14 L38 34"/>
+                <path d="M38 34 L34 34"/>
+                <path d="M34 34 L44 14"/>
+                <path d="M2 23 H16"/>
+                <path d="M48 23 H62"/>
+              </g></svg>
               <span class="nm">W-Frame</span>
               <span class="sz">160–400 cm</span>
             </button>
             <button class="frame" data-fam="X">
-              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 L26 36"/><path d="M26 13 L14 36"/><path d="M50 13 L38 36"/><path d="M38 13 L50 36"/><path d="M16 24 H48"/></g></svg>
+              <!-- X-Frame: tabletop with one X under it + small X under each bench end. -->
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="14" y="11" width="36" height="3"/>
+                <path d="M20 14 L32 34"/>
+                <path d="M44 14 L32 34"/>
+                <rect x="2" y="20" width="10" height="2"/>
+                <path d="M3 22 L7 33"/>
+                <path d="M11 22 L7 33"/>
+                <rect x="52" y="20" width="10" height="2"/>
+                <path d="M53 22 L57 33"/>
+                <path d="M61 22 L57 33"/>
+              </g></svg>
               <span class="nm">X-Frame</span>
               <span class="sz">160–400 cm</span>
             </button>
             <button class="frame" data-fam="U">
-              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="10" width="52" height="3"/><path d="M14 13 V36"/><path d="M22 13 V36"/><path d="M14 36 H22"/><path d="M42 13 V36"/><path d="M50 13 V36"/><path d="M42 36 H50"/></g></svg>
+              <!-- U-Frame: tabletop on closed-rectangle legs + small closed-rectangle
+                   legs under each bench — matches photo 1. -->
+              <svg viewBox="0 0 64 40"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="14" y="11" width="36" height="3"/>
+                <rect x="20" y="14" width="9" height="20"/>
+                <rect x="35" y="14" width="9" height="20"/>
+                <rect x="2" y="20" width="10" height="2"/>
+                <rect x="3" y="22" width="8" height="12"/>
+                <rect x="52" y="20" width="10" height="2"/>
+                <rect x="53" y="22" width="8" height="12"/>
+              </g></svg>
               <span class="nm">U-Frame</span>
               <span class="sz">160–400 cm</span>
             </button>
@@ -519,6 +552,8 @@ const SHOPIFY_LENGTHS = [160,180,200,220,240,260,280,300,350,400];
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
+       // Procedural legs are produced for every Shopify length, so every
+       // length is "native" — no fallback scaling for the legs.
        nativeLengths: [160,200,300,350,400],
        label: 'W-Frame',
        tabletop: '89×3 cm',
@@ -529,7 +564,7 @@ const FAMILIES = {
        match: (name, L) => ({
          backrest: name === `Backrest_W_${L}`,
          bench:    name === `2benchplanks_W__${L}`,
-         legs:     name === `Table_legs_W_${L}`,
+         legs:     name === `W_legs_${L}`,            // procedural — built for every Shopify length
          top:      name === `Table_top_W_${L}`,
        })},
   X: { lengths: SHOPIFY_LENGTHS,
@@ -544,7 +579,8 @@ const FAMILIES = {
        match: (name, L) => ({
          backrest: name === `Backrest_X_${L}`,
          bench:    name === `2benchplanks_X_${L}`,
-         legs:     name === `Table_legs_X_${L}`,
+         // Table X-legs from GLB + procedural bench X-legs both count as "legs"
+         legs:     name === `Table_legs_X_${L}` || name === `X_bench_legs_${L}`,
          top:      name === `Table_top_X_${L}`,
        })},
   U: { lengths: SHOPIFY_LENGTHS,
@@ -735,57 +771,162 @@ function isLegMesh(o){
   return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2) || /^U_legs/i.test(n1) || /^U_legs/i.test(n2);
 }
 
-// Procedurally builds a U-shaped metal leg-pair sub-tree for a given table length.
-// Output: a THREE.Group named "U_legs_{L}" containing two pairs of vertical posts
-// joined by horizontal bottom bars, with mounting plates on top.
+// Procedurally builds a U-shaped frame: closed rectangular metal loops, one per
+// table end, plus separate closed-loop legs under each bench end. Matches the
+// real product photos (sled-base / closed-loop legs, free-standing benches).
 function buildULegs(lengthCm){
   const L = lengthCm / 100;          // metres
-  const POST_W = 0.06, POST_D = 0.06; // square cross-section ~6 cm
-  const POST_H = 0.69;                // height to under-table
-  const SPREAD = 0.72;                // distance between the two vertical posts of one U
-  const PLATE_W = 0.16, PLATE_T = 0.012, PLATE_D = 0.16;
-  const INSET_Z = 0.18;               // how far in from each end of the tabletop the leg pair sits
-  const BENCH_H = 0.42;               // bench seat height (for cross-bar to support bench)
-  const BENCH_REACH = 0.55;           // outward arm length (toward the bench)
+  const POST_W = 0.055;                // square section ≈5.5 cm
+  const FRAME_H = 0.69;                // height under tabletop
+  const TABLE_HALF_W = 0.32;           // half-distance between the two vertical posts
+  const INSET_Z = 0.18;
+  const BENCH_H = 0.42;
+  const BENCH_LEG_HALF_W = 0.16;       // bench leg half-width
+  const BENCH_OFFSET_X = 0.66;         // distance from table center to bench center
 
   const group = new THREE.Group();
   group.name = `U_legs_${lengthCm}`;
 
-  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
-  for (const z of zPositions){
-    // Two vertical posts
-    const postL = new THREE.Mesh(new THREE.BoxGeometry(POST_W, POST_H, POST_D), makeMetalMaterial());
-    postL.position.set(-SPREAD/2, POST_H/2, z);
-    const postR = new THREE.Mesh(new THREE.BoxGeometry(POST_W, POST_H, POST_D), makeMetalMaterial());
-    postR.position.set( SPREAD/2, POST_H/2, z);
+  // Helper: closed rectangular frame (4 bars) at given XY plane, centred on Z.
+  function closedFrame(z, halfW, height, postSize){
+    const parts = [];
+    // Verticals
+    const lp = new THREE.Mesh(new THREE.BoxGeometry(postSize, height, postSize), makeMetalMaterial());
+    lp.position.set(-halfW, height/2, z); parts.push(lp);
+    const rp = new THREE.Mesh(new THREE.BoxGeometry(postSize, height, postSize), makeMetalMaterial());
+    rp.position.set( halfW, height/2, z); parts.push(rp);
+    // Horizontals
+    const top = new THREE.Mesh(new THREE.BoxGeometry(halfW*2 + postSize, postSize, postSize), makeMetalMaterial());
+    top.position.set(0, height - postSize/2, z); parts.push(top);
+    const bot = new THREE.Mesh(new THREE.BoxGeometry(halfW*2 + postSize, postSize, postSize), makeMetalMaterial());
+    bot.position.set(0, postSize/2, z); parts.push(bot);
+    return parts;
+  }
 
-    // Horizontal bottom bar (the floor of the U)
-    const bottom = new THREE.Mesh(
-      new THREE.BoxGeometry(SPREAD + POST_W, POST_W, POST_D),
-      makeMetalMaterial()
-    );
-    bottom.position.set(0, POST_W/2, z);
-
-    // Top mounting plates
-    const plateL = new THREE.Mesh(new THREE.BoxGeometry(PLATE_W, PLATE_T, PLATE_D), makeMetalMaterial());
-    plateL.position.set(-SPREAD/2, POST_H + PLATE_T/2, z);
-    const plateR = new THREE.Mesh(new THREE.BoxGeometry(PLATE_W, PLATE_T, PLATE_D), makeMetalMaterial());
-    plateR.position.set( SPREAD/2, POST_H + PLATE_T/2, z);
-
-    // Simple bench-support arms (so benches don't appear to float):
-    // two horizontal arms extending outward from each post at bench height.
-    const armGeom = new THREE.BoxGeometry(BENCH_REACH, POST_W*0.7, POST_D*0.7);
-    const armL = new THREE.Mesh(armGeom, makeMetalMaterial());
-    armL.position.set(-SPREAD/2 - BENCH_REACH/2, BENCH_H, z);
-    const armR = new THREE.Mesh(armGeom, makeMetalMaterial());
-    armR.position.set( SPREAD/2 + BENCH_REACH/2, BENCH_H, z);
-
-    [postL, postR, bottom, plateL, plateR, armL, armR].forEach(m => {
-      m.castShadow = true; m.receiveShadow = true;
-      group.add(m);
+  // 1) Table legs — two closed rectangles, one at each table end.
+  const tableZ = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of tableZ){
+    closedFrame(z, TABLE_HALF_W, FRAME_H, POST_W).forEach(m => {
+      m.castShadow = true; m.receiveShadow = true; group.add(m);
     });
   }
 
+  // 2) Bench legs — four small closed rectangles, one at each end of each bench.
+  const benchZ = tableZ;
+  const benchX = [-BENCH_OFFSET_X, BENCH_OFFSET_X];
+  for (const bx of benchX){
+    for (const bz of benchZ){
+      const sub = closedFrame(bz, BENCH_LEG_HALF_W, BENCH_H, POST_W * 0.8);
+      sub.forEach(m => {
+        m.position.x += bx;
+        m.castShadow = true; m.receiveShadow = true;
+        group.add(m);
+      });
+    }
+  }
+
+  return group;
+}
+
+// W-Frame procedural legs — clean trapezoidal sheet-metal supports, one per
+// table end, with outward bench arms. Replaces the cluttered baked-in GLB legs
+// so the silhouette matches the actual product (photo 2).
+function buildWLegs(lengthCm){
+  const L = lengthCm / 100;
+  const TABLE_HALF_W = 0.445;          // tabletop is 89cm wide
+  const GROUND_HALF_W = 0.18;          // narrow ground footprint
+  const TABLE_H = 0.70;
+  const BENCH_H = 0.42;
+  const BENCH_REACH = 0.48;            // bench extends outward this much from table edge
+  const INSET_Z = 0.16;
+  const SLAB_W = 0.08;                 // panel width (along Y, vertical span)
+  const SLAB_T = 0.025;                // panel thickness (along Z)
+  const BAR_T = 0.045;
+
+  const group = new THREE.Group();
+  group.name = `W_legs_${lengthCm}`;
+
+  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of zPositions){
+    const parts = [];
+
+    // Top crossbar under the tabletop
+    const topBar = new THREE.Mesh(
+      new THREE.BoxGeometry(TABLE_HALF_W * 1.9, BAR_T, BAR_T * 1.8),
+      makeMetalMaterial()
+    );
+    topBar.position.set(0, TABLE_H - BAR_T/2, z); parts.push(topBar);
+
+    // Bottom narrow foot
+    const botBar = new THREE.Mesh(
+      new THREE.BoxGeometry(GROUND_HALF_W * 2, BAR_T, BAR_T * 1.8),
+      makeMetalMaterial()
+    );
+    botBar.position.set(0, BAR_T/2, z); parts.push(botBar);
+
+    // Two angled side panels splaying outward as they rise (the trapezoid sides)
+    for (const side of [-1, 1]){
+      const x1 = side * GROUND_HALF_W, y1 = 0;
+      const x2 = side * TABLE_HALF_W,  y2 = TABLE_H;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(len, SLAB_W, SLAB_T),
+        makeMetalMaterial()
+      );
+      panel.position.set((x1+x2)/2, (y1+y2)/2, z);
+      panel.rotation.z = Math.atan2(dy, dx);
+      parts.push(panel);
+    }
+
+    // Horizontal bench arms (sheet-metal arms that the bench planks rest on)
+    for (const side of [-1, 1]){
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(BENCH_REACH, BAR_T, BAR_T * 1.5),
+        makeMetalMaterial()
+      );
+      arm.position.set(side * (TABLE_HALF_W + BENCH_REACH/2 - 0.04), BENCH_H, z);
+      parts.push(arm);
+    }
+
+    parts.forEach(m => { m.castShadow = true; m.receiveShadow = true; group.add(m); });
+  }
+  return group;
+}
+
+// X-Frame bench legs — the GLB has X-legs for the table only. We add small
+// procedural X-supports under each bench end so benches don't float.
+function buildXBenchLegs(lengthCm){
+  const L = lengthCm / 100;
+  const BENCH_H  = 0.42;
+  const INSET_Z  = 0.16;
+  const BAR_T    = 0.04;
+  const X_HALF_W = 0.18;               // X footprint half-width
+  const BENCH_X  = 0.66;               // bench centre offset from table centre
+  const SLAB_D   = BAR_T * 1.5;
+
+  const group = new THREE.Group();
+  group.name = `X_bench_legs_${lengthCm}`;
+
+  const benchZ = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  const benchX = [-BENCH_X, BENCH_X];
+
+  for (const bx of benchX){
+    for (const bz of benchZ){
+      const len = Math.hypot(X_HALF_W*2, BENCH_H);
+      const ang = Math.atan2(BENCH_H, X_HALF_W*2);
+      for (const sign of [1, -1]){
+        const d = new THREE.Mesh(
+          new THREE.BoxGeometry(len, BAR_T, SLAB_D),
+          makeMetalMaterial()
+        );
+        d.position.set(bx, BENCH_H/2, bz);
+        d.rotation.z = sign * ang;
+        d.castShadow = true; d.receiveShadow = true;
+        group.add(d);
+      }
+    }
+  }
   return group;
 }
 
@@ -832,6 +973,20 @@ async function loadAll(){
     const u = buildULegs(L);
     u.visible = false;
     models.X.add(u);
+  }
+  // W-frame: procedural sheet-metal legs replace the cluttered baked-in GLB legs,
+  // matching the customer product photos (clean trapezoidal supports at each end).
+  for (const L of FAMILIES.W.lengths){
+    const w = buildWLegs(L);
+    w.visible = false;
+    models.W.add(w);
+  }
+  // X-frame: procedural small X-supports under each bench end (the GLB only has
+  // the table X-legs, not bench legs).
+  for (const L of FAMILIES.X.lengths){
+    const xb = buildXBenchLegs(L);
+    xb.visible = false;
+    models.X.add(xb);
   }
 
   applyTint(tintHex); applyLegColor(legHex);
@@ -889,11 +1044,19 @@ function applyVisibility(){
       }
     });
   }
-  // Also reset the other family's native leg/wood meshes (they share the X scene)
-  if (currentFamily === 'U' || currentFamily === 'X'){
+  // Reset every leg-group (procedural and baked-in) so nothing leaks between
+  // families. The right ones get re-enabled in pass 2.
+  root.traverse(o => {
+    if (!o.name) return;
+    if (/^Table_legs_X_|^U_legs_|^W_legs_|^X_bench_legs_/.test(o.name)){
+      o.visible = false; o.scale.z = 1;
+    }
+  });
+  // W-Frame: hide the baked-in GLB legs entirely — they're replaced by the
+  // procedural W_legs_<L> generated in loadAll().
+  if (currentFamily === 'W'){
     root.traverse(o => {
-      if (!o.name) return;
-      if (/^Table_legs_X_|^U_legs_/.test(o.name)){ o.visible = false; o.scale.z = 1; }
+      if (o.name && /^Table_legs_W_/.test(o.name)){ o.visible = false; o.scale.z = 1; }
     });
   }
 
@@ -922,12 +1085,13 @@ function applyVisibility(){
     else if (r.backrest) show = shouldShowBack;
     else if (r.legs){
       if (currentFamily === 'U' && /^U_legs_/.test(o.name)) show = true;
-      else if (currentFamily === 'X' && /^Table_legs_X_/.test(o.name)) show = true;
-      else if (currentFamily === 'W' && /^Table_legs_W_/.test(o.name)) show = true;
+      else if (currentFamily === 'X' && (/^Table_legs_X_/.test(o.name) || /^X_bench_legs_/.test(o.name))) show = true;
+      else if (currentFamily === 'W' && /^W_legs_/.test(o.name)) show = true;
     }
     if (show){
       o.visible = true;
-      if (!/^U_legs_/.test(o.name)) o.scale.z = scaleZ;
+      // Procedural legs (U/W/X-bench) are built per-length, don't scale them
+      if (!/^U_legs_|^W_legs_|^X_bench_legs_/.test(o.name)) o.scale.z = scaleZ;
       // Apply / remove clipping for benches & backrests
       if (o.isMesh && o.material){
         if (r.bench)         o.material.clippingPlanes = benchClipPlanes;
