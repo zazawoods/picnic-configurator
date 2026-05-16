@@ -603,8 +603,19 @@ const FAMILIES = {
        legOption: 'X-Tischbeine',
        hasBackrest: false,
        hasBenchChoice: true,
-       legStyle: 'Xshape',
-       match: makeMatch('Xshape') },
+       legStyle: 'X',
+       // X uses procedural legs with the same 5.5cm square profile as U for
+       // visual consistency. The X_bench_legs group contains both sides;
+       // per-side visibility is handled via userData.isBenchLeg/benchSide
+       // post-pass below in applyVisibility.
+       match: (name, L) => ({
+         bench1:     name === `3planks_bench1_${L}`,
+         bench2:     name === `3planks_bench2_${L}`,
+         legs:       name === `X_legs_${L}` || name === `X_bench_legs_${L}`,
+         benchlegs1: false,
+         benchlegs2: false,
+         top:        name === `Table_top_${L}`,
+       }) },
   U: { lengths: SHOPIFY_LENGTHS,
        nativeLengths: SHOPIFY_LENGTHS,
        label: 'U-Frame',
@@ -1043,75 +1054,85 @@ function buildWLegs(lengthCm){
 // X-Frame procedural TABLE legs only — two clean X-frames at the table ends.
 // Replaces the cluttered baked-in GLB X-legs so the silhouette matches the
 // actual product photo. Bench legs are produced separately by buildXBenchLegs.
+// X-Frame procedural TABLE legs — match U-Frame's profile (square 5.5cm beam)
+// and same overall table footprint dimensions for visual consistency.
+// Two crossing X-beams per table end, beams overshoot 2cm into the wood for
+// a flush joint.
 function buildXLegs(lengthCm){
   const L = lengthCm / 100;
-  const TABLE_HALF_W = 0.445;          // tabletop 89cm wide
-  const GROUND_HALF_W = 0.20;          // narrow ground footprint
-  const TABLE_H = 0.70;
-  const INSET_Z = 0.16;
-  const SLAB_W = 0.075;                // X-arm width
-  const SLAB_T = 0.030;                // sheet thickness
+  const TABLE_X_ATTACH  = 0.40;        // X where beam meets table bottom (under the 89cm top)
+  const GROUND_HALF_W   = 0.40;        // X spread on the ground (same footprint as table top)
+  const TABLE_Y_BOTTOM  = 0.745;       // bottom of 9cm picknickset table
+  const INSET_Z         = 0.10;        // 10cm from each table end (matches U)
+  const BEAM            = 0.055;       // square cross-section 5.5×5.5cm (matches U)
+  const OVERSHOOT       = 0.02;
 
   const group = new THREE.Group();
   group.name = `X_legs_${lengthCm}`;
 
+  function addBeam(g, x1, y1, x2, y2, z){
+    const dx = x2 - x1, dy = y2 - y1;
+    const baseLen = Math.hypot(dx, dy);
+    const ux = dx / baseLen, uy = dy / baseLen;
+    const len = baseLen + OVERSHOOT * 2;          // overshoot both ends (into ground + wood)
+    const cx = (x1 + x2) / 2;
+    const cy = (y1 + y2) / 2;
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(len, BEAM, BEAM),
+      makeMetalMaterial()
+    );
+    beam.position.set(cx, cy, z);
+    beam.rotation.z = Math.atan2(dy, dx);
+    beam.castShadow = true; beam.receiveShadow = true;
+    g.add(beam);
+  }
+
   const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
   for (const z of zPositions){
-    for (const dir of [1, -1]){
-      const x1 = dir * GROUND_HALF_W,  y1 = 0;
-      const x2 = -dir * TABLE_HALF_W,  y2 = TABLE_H;
-      const dx = x2 - x1, dy = y2 - y1;
-      const len = Math.hypot(dx, dy);
-      const arm = new THREE.Mesh(
-        new THREE.BoxGeometry(len, SLAB_W, SLAB_T),
-        makeMetalMaterial()
-      );
-      arm.position.set((x1+x2)/2, (y1+y2)/2, z);
-      arm.rotation.z = Math.atan2(dy, dx);
-      arm.castShadow = true; arm.receiveShadow = true;
-      group.add(arm);
-    }
+    // Two crossing diagonals forming an X under the table
+    addBeam(group, -GROUND_HALF_W, 0, +TABLE_X_ATTACH, TABLE_Y_BOTTOM, z);
+    addBeam(group, +GROUND_HALF_W, 0, -TABLE_X_ATTACH, TABLE_Y_BOTTOM, z);
   }
   return group;
 }
 
-// X-Frame BENCH legs — independent small X-supports under each bench end
-// (the benches are free-standing in the real product, not attached to the
-// table legs). Tagged with isBenchLeg/benchSide so 1-bench / no-bench modes
-// hide the correct side.
+// X-Frame procedural BENCH legs — small independent X-supports under each
+// bench end, same 5.5cm square profile as the table legs and U-Frame.
 function buildXBenchLegs(lengthCm){
   const L = lengthCm / 100;
-  const BENCH_H = 0.42;
-  const INSET_Z = 0.18;
-  const BAR_T = 0.05;
-  const SLAB_T = 0.028;
-  const X_HALF_W = 0.16;               // small X footprint half-width
-  const BENCH_X = 0.65;                // bench centre offset (same as bench seat centre)
+  const BENCH_Y_BOTTOM  = 0.355;       // bottom of 9cm picknickset bench seat
+  const INSET_Z         = 0.10;
+  const BEAM            = 0.045;       // slightly thinner than table beam (matches U bench)
+  const BENCH_X         = 0.86;        // bench centre (matches picknickset bench mesh)
+  const BENCH_HALF_W    = 0.20;        // half-width of bench footprint
+  const OVERSHOOT       = 0.02;
 
   const group = new THREE.Group();
   group.name = `X_bench_legs_${lengthCm}`;
 
-  const benchZ = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
-  const benchX = [-BENCH_X, BENCH_X];
+  function addBeam(g, x1, y1, x2, y2, z, side){
+    const dx = x2 - x1, dy = y2 - y1;
+    const baseLen = Math.hypot(dx, dy);
+    const len = baseLen + OVERSHOOT * 2;
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(len, BEAM, BEAM),
+      makeMetalMaterial()
+    );
+    beam.position.set((x1 + x2) / 2, (y1 + y2) / 2, z);
+    beam.rotation.z = Math.atan2(dy, dx);
+    beam.userData.isBenchLeg = true;
+    beam.userData.benchSide = side;
+    beam.castShadow = true; beam.receiveShadow = true;
+    g.add(beam);
+  }
 
-  for (const bx of benchX){
+  const benchZ = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const bx of [-BENCH_X, +BENCH_X]){
+    const sideSign = Math.sign(bx);
     for (const bz of benchZ){
-      for (const dir of [1, -1]){
-        const x1 = bx + dir * X_HALF_W,  y1 = 0;
-        const x2 = bx - dir * X_HALF_W,  y2 = BENCH_H;
-        const dx = x2 - x1, dy = y2 - y1;
-        const len = Math.hypot(dx, dy);
-        const arm = new THREE.Mesh(
-          new THREE.BoxGeometry(len, BAR_T, SLAB_T),
-          makeMetalMaterial()
-        );
-        arm.position.set((x1+x2)/2, (y1+y2)/2, bz);
-        arm.rotation.z = Math.atan2(dy, dx);
-        arm.userData.isBenchLeg = true;
-        arm.userData.benchSide = Math.sign(bx);
-        arm.castShadow = true; arm.receiveShadow = true;
-        group.add(arm);
-      }
+      // Two crossing diagonals forming a small X under this bench end
+      addBeam(group, bx - BENCH_HALF_W, 0, bx + BENCH_HALF_W, BENCH_Y_BOTTOM, bz, sideSign);
+      addBeam(group, bx + BENCH_HALF_W, 0, bx - BENCH_HALF_W, BENCH_Y_BOTTOM, bz, sideSign);
     }
   }
   return group;
@@ -1170,9 +1191,11 @@ async function loadAll(){
   processRoot(setRoot, true);
   processRoot(wRoot,   false);
 
-  // Extract real W-leg meshes from angle.glb into models.SET. Y-offset lifts
-  // them so the V-tops just touch the bottom of the 9cm picknickset table top.
-  const W_LEG_Y_OFFSET = 0.045;  // picknickset table-top bottom Y=0.745 vs angle native top ~0.70
+  // Extract real W-leg meshes from angle.glb into models.SET. Each leg is
+  // wrapped in a Group placed at the leg's geometric world centre so that
+  // scaling the wrapper (scale.z) stays symmetric and the V-frames don't
+  // drift sideways.
+  const W_LEG_Y_OFFSET = 0.045;
   window.__wLegs = {};
   const legsToMove = [];
   wRoot.traverse(o => {
@@ -1181,19 +1204,36 @@ async function loadAll(){
   });
   for (const { L, node } of legsToMove){
     node.updateWorldMatrix(true, false);
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    const scl = new THREE.Vector3();
-    node.matrixWorld.decompose(pos, quat, scl);
-    pos.y += W_LEG_Y_OFFSET;
-    node.position.copy(pos);
-    node.quaternion.copy(quat);
-    node.scale.copy(scl);
-    node.visible = false;
-    models.SET.add(node);
-    window.__wLegs[L] = node;
+    // World-space bbox centre of the leg
+    const wbox = new THREE.Box3().setFromObject(node);
+    const wcenter = wbox.getCenter(new THREE.Vector3());
+
+    // Create a Group at the geometric centre and attach the leg to it.
+    // attach() preserves the leg's world position, so the inner mesh stays put
+    // visually but is now relative to a centre-pivot wrapper.
+    const wrap = new THREE.Group();
+    wrap.name = node.name; // keep the name on the wrapper so __wLegs lookup works
+    wrap.position.copy(wcenter);
+    wrap.position.y += W_LEG_Y_OFFSET;
+    wrap.visible = false;
+    models.SET.add(wrap);
+    wrap.attach(node);
+
+    window.__wLegs[L] = wrap;
   }
   scene.remove(wRoot);
+
+  // Procedural X-legs with the same 5.5cm square profile as U (so X and U
+  // visually share the metal profile). picknickset's Xshape table legs and
+  // Xshape bench legs are NOT used — replaced by our procedural geometry.
+  for (const L of SHOPIFY_LENGTHS){
+    const x = buildXLegs(L);
+    x.visible = false;
+    models.SET.add(x);
+    const xb = buildXBenchLegs(L);
+    xb.visible = false;
+    models.SET.add(xb);
+  }
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
@@ -1250,7 +1290,7 @@ function applyVisibility(){
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|X_legs|X_bench_legs).*_\d+$/;
   root.traverse(o => {
     if (o.name && NAMED_VARIANT.test(o.name)){
       o.visible = false;
@@ -1291,6 +1331,18 @@ function applyVisibility(){
             c.visible = (side === 1) ? showBench1 : showBench2;
           }
         });
+      }
+    });
+  }
+
+  // Bench-leg side filter for procedural X bench-legs (which live in a single
+  // group with both sides combined). bench-side userData lets us hide one half
+  // for the "1 bench" / "no bench" cases.
+  if (fam.hasBenchChoice){
+    root.traverse(o => {
+      if (o.isMesh && o.userData && o.userData.isBenchLeg){
+        if (benches === 0) o.visible = false;
+        else if (benches === 1) o.visible = (o.userData.benchSide > 0);
       }
     });
   }
