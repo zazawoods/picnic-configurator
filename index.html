@@ -545,12 +545,14 @@ if (backUrl){
   });
 }
 
-// === Embedded GLB URL — single complete asset hosted on GitHub Raw ===
-// picknickset_douglas.glb contains all leg styles, all bench variants and
-// every Shopify length natively. PBR wood + metal textures are embedded so
-// we no longer ship a separate wood.jpg.
+// === Embedded GLB URLs hosted on GitHub Raw ===
+// • picknickset_douglas.glb — Xshape + Ushape table legs + matching bench legs,
+//   all 10 Shopify lengths native, embedded PBR textures.
+// • angle.glb — original W-Frame model with INTEGRATED leg (one continuous
+//   metal frame supports table + both benches per end). Used for W-Frame only.
 const CDN     = 'https://raw.githubusercontent.com/zazawoods/picnic-configurator/main';
 const URL_SET = CDN + '/picknickset_douglas.glb';
+const URL_W   = CDN + '/angle.glb';
 
 // === Family configuration ===
 // Every Shopify length is native in the new GLB, so no fallback scaling.
@@ -572,22 +574,25 @@ function makeMatch(legStyle){
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
-       nativeLengths: SHOPIFY_LENGTHS,
+       // angle.glb has these 6 native lengths; missing Shopify lengths are
+       // rendered from the closest native with scale.z applied.
+       nativeLengths: [160, 200, 250, 300, 350, 400],
        label: 'W-Frame',
-       tabletop: '89×9 cm',
-       height: '≈75 cm',
+       tabletop: '89×3 cm',
+       height: '≈70 cm',
        productHandle: 'picknicktisch-aus-massivem-douglasienholz',
        hasBackrest: false,                    // no backrest on Picknicktisch
        hasBenchChoice: false,                 // always 2 benches
-       legStyle: 'W',                         // procedural integrated structure
-       // For W we use the procedural integrated frame; no separate bench legs.
+       legStyle: 'W',
+       // W uses the original angle.glb naming. Table_legs_W is the INTEGRATED
+       // metal frame supporting table + both benches at each end.
        match: (name, L) => ({
-         bench1:     name === `3planks_bench1_${L}`,
-         bench2:     name === `3planks_bench2_${L}`,
-         legs:       name === `W_legs_${L}`,    // procedural
-         benchlegs1: false,                     // integrated into legs
+         bench1:     name === `2benchplanks_W__${L}`, // shared bench mesh (left+right combined)
+         bench2:     false,                            // angle.glb has a single bench mesh
+         legs:       name === `Table_legs_W_${L}`,
+         benchlegs1: false,
          benchlegs2: false,
-         top:        name === `Table_top_${L}`,
+         top:        name === `Table_top_W_${L}`,
        }) },
   X: { lengths: SHOPIFY_LENGTHS,
        nativeLengths: SHOPIFY_LENGTHS,
@@ -697,8 +702,8 @@ let legKey  = 'black';
 // Each major asset contributes to the global progress %.
 // We use rough weights so the bar moves smoothly (xset.glb is ~4.5MB so the
 // biggest chunk).
-const LOAD_WEIGHTS = { 'angle': 22, 'xset': 70, 'wood': 8 };
-const loadState = { angle:0, xset:0, wood:0 };
+const LOAD_WEIGHTS = { 'set': 70, 'w': 25, 'wood': 5 };
+const loadState = { set:0, w:0, wood:1 };
 function setLoadProgress(key, fraction){
   loadState[key] = Math.max(0, Math.min(1, fraction || 0));
   let total = 0, full = 0;
@@ -1114,59 +1119,61 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  // Single GLB now contains every leg style, every length, both benches, every
-  // bench-leg variant, and embedded PBR textures. Materials are tagged in the
-  // GLB itself: "base table" = wood, "base material" = metal accents.
-  const root = await loadGLB(URL_SET, 'set');
-  models.SET = root;
-  root.visible = false;
+  // Two GLBs in parallel: SET for X/U + wood, W for the integrated W-Frame.
+  const [setRoot, wRoot] = await Promise.all([
+    loadGLB(URL_SET, 'set'),
+    loadGLB(URL_W,   'w'),
+  ]);
+  models.SET = setRoot;
+  models.W   = wRoot;
+  setRoot.visible = false;
+  wRoot.visible   = false;
 
-  root.traverse(o => {
-    if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = true;
-    const origMat = (o.material && o.material.name || '').toLowerCase();
-    const isMetalAccent = origMat === 'base material' || isLegMesh(o);
-    if (isMetalAccent){
-      o.material = makeMetalMaterial();
-    } else {
-      // Keep the GLB-embedded wood texture (high-quality 2K Albedo). Wrap to
-      // tile across longer planks, apply colour-managed material.
-      const origTex = o.material && o.material.map;
-      if (origTex){
-        origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
-        origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        origTex.colorSpace = THREE.SRGBColorSpace;
-        origTex.needsUpdate = true;
-        woodTex = woodTex || origTex; // remember for any future tint use
+  // Wood / metal material assignment is the same for both files: meshes whose
+  // GLB material is "base material" become metal; everything else is wood.
+  function processRoot(root, preferEmbeddedTex){
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      const origMat = (o.material && o.material.name || '').toLowerCase();
+      const isMetalAccent = origMat === 'base material' || isLegMesh(o);
+      if (isMetalAccent){
+        o.material = makeMetalMaterial();
+      } else {
+        const origTex = o.material && o.material.map;
+        if (origTex && preferEmbeddedTex){
+          origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
+          origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          origTex.colorSpace = THREE.SRGBColorSpace;
+          origTex.needsUpdate = true;
+          woodTex = woodTex || origTex;
+        }
+        const m = new THREE.MeshStandardMaterial({
+          map: woodTex || origTex,
+          color: 0xffffff,
+          roughness: 0.72,
+          metalness: 0.0,
+        });
+        m.userData.isWood = true;
+        o.material = m;
       }
-      const m = new THREE.MeshStandardMaterial({
-        map: origTex || woodTex,
-        color: 0xffffff,
-        roughness: 0.72,
-        metalness: 0.0,
-      });
-      m.userData.isWood = true;
-      o.material = m;
-    }
-  });
-  scene.add(root);
-
-  // W-Frame uses a procedural INTEGRATED metal frame (one piece supports both
-  // table and benches — Picknicktisch product). The GLB's separate Aframe legs
-  // are not used for W.
-  for (const L of SHOPIFY_LENGTHS){
-    const w = buildWFrame(L);
-    w.visible = false;
-    models.SET.add(w);
+    });
+    scene.add(root);
   }
+  // Process picknickset first so its embedded 2K wood texture is captured into
+  // woodTex, then apply the same wood to angle.glb meshes for visual consistency.
+  processRoot(setRoot, true);
+  processRoot(wRoot,   false);
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
 }
 
-// Single scene for all families — only leg/bench-leg meshes differ.
-function rootForFamily(fam){ return models.SET; }
+// W lives in models.W (angle.glb); X and U share models.SET (picknickset.glb).
+function rootForFamily(fam){
+  return fam === 'W' ? models.W : models.SET;
+}
 
 function applyTint(hex){
   const c = new THREE.Color(hex);
@@ -1192,7 +1199,10 @@ function applyVisibility(){
   const fam = FAMILIES[currentFamily];
   const root = rootForFamily(currentFamily);
   if (!root) return;
-  root.visible = true;
+  // Show only the currently selected root; hide all others.
+  for (const k of Object.keys(models)){
+    if (models[k]) models[k].visible = (models[k] === root);
+  }
 
   // Bench-count semantics (matches Shopify "Anzahl der Bänke"):
   //   2 benches → show bench1 + bench2 + both bench-leg sets
@@ -1203,19 +1213,27 @@ function applyVisibility(){
   const showBench1 = benches >= 2;
   const showBench2 = benches >= 1;
 
+  // Use the closest native length when the chosen length isn't natively present
+  // in the source GLB; scale.z stretches the mesh to the chosen length.
+  const renderL = closestNative(currentFamily, currentLength);
+  const scaleZ  = currentLength / renderL;
+
   // Pass 1: hide every length-specific named variant. We only target LEAF
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|W_legs|Backrest_W).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|2benchplanks_W|Backrest_W).*_\d+$/;
   root.traverse(o => {
-    if (o.name && NAMED_VARIANT.test(o.name)){ o.visible = false; }
+    if (o.name && NAMED_VARIANT.test(o.name)){
+      o.visible = false;
+      o.scale.z = 1;
+    }
   });
 
-  // Pass 2: enable exactly the meshes for this family at this length.
+  // Pass 2: enable exactly the meshes for this family at this renderL.
   root.traverse(o => {
     if (!o.name) return;
-    const r = fam.match(o.name, currentLength);
+    const r = fam.match(o.name, renderL);
     let show = false;
     if      (r.top)        show = true;
     else if (r.bench1)     show = showBench1;
@@ -1223,7 +1241,10 @@ function applyVisibility(){
     else if (r.legs)       show = true;
     else if (r.benchlegs1) show = showBench1;
     else if (r.benchlegs2) show = showBench2;
-    if (show){ o.visible = true; }
+    if (show){
+      o.visible = true;
+      if (scaleZ !== 1) o.scale.z = scaleZ;
+    }
   });
 
   // Backrest (W-Frame only). Shown when the family supports it AND backOn=true.
