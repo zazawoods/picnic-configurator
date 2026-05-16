@@ -337,22 +337,6 @@
         </div>
       </details>
 
-      <details class="acc" id="accBackrest" hidden>
-        <summary>
-          <span class="acc-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19v-8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8"/><path d="M3 19h18"/><path d="M7 8V5"/><path d="M17 8V5"/></svg>
-          </span>
-          <span class="acc-text">
-            <span class="acc-title" data-i18n="backrest">Backrest</span>
-            <span class="acc-value" id="accBackrestValue">Without backrest</span>
-          </span>
-          <span class="acc-chev">▾</span>
-        </summary>
-        <div class="acc-body">
-          <div class="chips" id="backrestChips"></div>
-        </div>
-      </details>
-
     </div>
 
     <!-- Hidden, kept for JS compatibility: backrest is always-on for W and not
@@ -593,7 +577,7 @@ const FAMILIES = {
        tabletop: '89×9 cm',
        height: '≈75 cm',
        productHandle: 'picknicktisch-aus-massivem-douglasienholz',
-       hasBackrest: true,                     // optional backrest available on W
+       hasBackrest: false,                    // no backrest on Picknicktisch
        hasBenchChoice: false,                 // always 2 benches
        legStyle: 'W',                         // procedural integrated structure
        // For W we use the procedural integrated frame; no separate bench legs.
@@ -1167,14 +1151,11 @@ async function loadAll(){
 
   // W-Frame uses a procedural INTEGRATED metal frame (one piece supports both
   // table and benches — Picknicktisch product). The GLB's separate Aframe legs
-  // are not used for W. We also generate optional backrests for the W benches.
+  // are not used for W.
   for (const L of SHOPIFY_LENGTHS){
     const w = buildWFrame(L);
     w.visible = false;
     models.SET.add(w);
-    const br = buildBackrests(L);
-    br.visible = false;
-    models.SET.add(br);
   }
 
   applyTint(tintHex); applyLegColor(legHex);
