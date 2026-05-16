@@ -574,8 +574,7 @@ function makeMatch(legStyle){
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
-       nativeLengths: SHOPIFY_LENGTHS,                // wood is all native
-       legNativeLengths: [160, 200, 250, 300, 350, 400],  // angle.glb leg variants
+       nativeLengths: SHOPIFY_LENGTHS,
        label: 'W-Frame',
        tabletop: '89×9 cm',
        height: '≈75 cm',
@@ -583,12 +582,12 @@ const FAMILIES = {
        hasBackrest: false,
        hasBenchChoice: false,
        legStyle: 'W',
-       // W uses picknickset's thick wood. The integrated W-leg from angle.glb
-       // is handled separately in applyVisibility (see __wLegs lookup).
+       // W uses picknickset's thick wood + procedural W_legs designed to mate
+       // flush with that exact wood thickness (no CAD mismatch).
        match: (name, L) => ({
          bench1:     name === `3planks_bench1_${L}`,
          bench2:     name === `3planks_bench2_${L}`,
-         legs:       false,                            // handled specially
+         legs:       name === `W_legs_${L}`,
          benchlegs1: false,
          benchlegs2: false,
          top:        name === `Table_top_${L}`,
@@ -701,8 +700,8 @@ let legKey  = 'black';
 // Each major asset contributes to the global progress %.
 // We use rough weights so the bar moves smoothly (xset.glb is ~4.5MB so the
 // biggest chunk).
-const LOAD_WEIGHTS = { 'set': 70, 'w': 25, 'wood': 5 };
-const loadState = { set:0, w:0, wood:1 };
+const LOAD_WEIGHTS = { 'set': 100 };
+const loadState = { set:0 };
 function setLoadProgress(key, fraction){
   loadState[key] = Math.max(0, Math.min(1, fraction || 0));
   let total = 0, full = 0;
@@ -789,62 +788,72 @@ function isLegMesh(o){
   return /^Table_legs/i.test(n1) || /^Table_legs/i.test(n2) || /^U_legs/i.test(n1) || /^U_legs/i.test(n2);
 }
 
-// W-Frame: ONE INTEGRATED metal structure per table end that supports BOTH
-// the tabletop and both bench seats. End-on silhouette is a "W" / "M". This
-// is the Picknicktisch product on the site — table and benches share legs.
-// Profile: chunky square-section metal beams (~8cm) like the real product,
-// not flat sheet metal.
+// W-Frame procedural — integrated metal frame mating EXACTLY with picknickset
+// wood dimensions. Two V-frames per table end, 4 angled beams per end. Beams
+// terminate inside the wood by `OVERSHOOT` so the visible joint is flush.
+//
+// Wood reference (picknickset.glb measured world bounds):
+//   Tabletop: Y range [0.745, 0.835], X range [-0.445, +0.445], 89cm wide
+//   Bench:    Y range [0.355, 0.445], X range bench1 [-1.08, -0.64], bench2 [+0.64, +1.08]
 function buildWFrame(lengthCm){
   const L = lengthCm / 100;
-  const TABLE_HALF_W   = 0.39;   // inner attachment to tabletop (slightly narrower than top)
-  const GROUND_HALF_W  = 0.20;   // narrow ground footprint between the two V's
-  const BENCH_OUTER_X  = 1.06;   // outer bench corner (where leg meets bench)
-  const TABLE_H        = 0.71;
-  const BENCH_H        = 0.42;
-  const INSET_Z        = 0.16;
-  const BEAM_W         = 0.08;   // metal beam cross-section width (Y)
-  const BEAM_T         = 0.06;   // metal beam cross-section depth (Z)
-  const BAR_T          = 0.06;
+
+  // Wood-mating points (computed from picknickset wood positions):
+  const TABLE_Y_BOTTOM  = 0.745;   // bottom face of 9cm-thick table top
+  const TABLE_X_ATTACH  = 0.395;   // X where inner-V meets table (just inside table edge ±0.445)
+  const BENCH_Y_BOTTOM  = 0.355;   // bottom face of 9cm-thick bench seat
+  const BENCH_X_ATTACH  = 0.85;    // X where outer-V meets bench (middle of bench width 0.64–1.08)
+  const GROUND_APEX_X   = 0.22;    // V apex X (between bench-inner 0.64 and table-edge 0.445)
+
+  const INSET_Z         = 0.10;    // 10cm from each table end
+  const BEAM_W          = 0.07;    // beam cross-section width (Y, vertical thickness)
+  const BEAM_T          = 0.06;    // beam cross-section depth (Z)
+  const OVERSHOOT       = 0.02;    // 2cm beam overshoot into the wood — guarantees flush joint
 
   const group = new THREE.Group();
   group.name = `W_legs_${lengthCm}`;
 
-  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
-  for (const z of zPositions){
-    // 4 angled beam segments forming the W/M outline — two V's per end.
-    const points = [
-      [-BENCH_OUTER_X, BENCH_H],   // P0: bench-outer-left top
-      [-GROUND_HALF_W, 0],         // P1: ground left
-      [-TABLE_HALF_W,  TABLE_H],   // P2: table-inner-left top
-      [ TABLE_HALF_W,  TABLE_H],   // P3: table-inner-right top
-      [ GROUND_HALF_W, 0],         // P4: ground right
-      [ BENCH_OUTER_X, BENCH_H],   // P5: bench-outer-right top
-    ];
-    for (let i = 0; i < points.length - 1; i++){
-      // Segment between P2 and P3 is the horizontal top — handled by topBar.
-      if (i === 2) continue;
-      const [x1, y1] = points[i];
-      const [x2, y2] = points[i + 1];
-      const dx = x2 - x1, dy = y2 - y1;
-      const len = Math.hypot(dx, dy);
-      // Slightly extend beam length so the joint corners overlap nicely.
-      const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(len + BEAM_W * 0.15, BEAM_W, BEAM_T),
-        makeMetalMaterial()
-      );
-      beam.position.set((x1+x2)/2, (y1+y2)/2, z);
-      beam.rotation.z = Math.atan2(dy, dx);
-      beam.castShadow = true; beam.receiveShadow = true;
-      group.add(beam);
-    }
-    // Top crossbar under the tabletop (inner V's connector)
-    const topBar = new THREE.Mesh(
-      new THREE.BoxGeometry(TABLE_HALF_W * 2 + BEAM_W * 0.5, BAR_T, BEAM_T),
+  function addBeam(g, x1, y1, x2, y2, z){
+    const dx = x2 - x1, dy = y2 - y1;
+    const baseLen = Math.hypot(dx, dy);
+    const len = baseLen + OVERSHOOT;
+    // Shift the centre toward the (x2, y2) end by half the overshoot so the
+    // top tip buries 2cm into the wood; the bottom tip stays on the ground.
+    const ux = dx / baseLen, uy = dy / baseLen;
+    const cx = (x1 + x2) / 2 + ux * OVERSHOOT / 2;
+    const cy = (y1 + y2) / 2 + uy * OVERSHOOT / 2;
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(len, BEAM_W, BEAM_T),
       makeMetalMaterial()
     );
-    topBar.position.set(0, TABLE_H - BAR_T/2, z);
-    topBar.castShadow = true; topBar.receiveShadow = true;
-    group.add(topBar);
+    beam.position.set(cx, cy, z);
+    beam.rotation.z = Math.atan2(dy, dx);
+    beam.castShadow = true; beam.receiveShadow = true;
+    g.add(beam);
+  }
+
+  const zPositions = [-(L/2 - INSET_Z), (L/2 - INSET_Z)];
+  for (const z of zPositions){
+    for (const sx of [-1, +1]){
+      // Inner V-leg: ground apex → table-bottom
+      addBeam(group,
+        sx * GROUND_APEX_X, 0,
+        sx * TABLE_X_ATTACH, TABLE_Y_BOTTOM,
+        z);
+      // Outer V-leg: ground apex → bench-bottom
+      addBeam(group,
+        sx * GROUND_APEX_X, 0,
+        sx * BENCH_X_ATTACH, BENCH_Y_BOTTOM,
+        z);
+    }
+    // Hidden under-table crossbar joining the two inner-V tops (structural).
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(TABLE_X_ATTACH * 2 + BEAM_T, BEAM_W, BEAM_T),
+      makeMetalMaterial()
+    );
+    top.position.set(0, TABLE_Y_BOTTOM - BEAM_W / 2, z);
+    top.castShadow = true; top.receiveShadow = true;
+    group.add(top);
   }
   return group;
 }
@@ -1118,81 +1127,48 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  // Two GLBs in parallel: SET for X/U + wood, W for the integrated W-Frame.
-  const [setRoot, wRoot] = await Promise.all([
-    loadGLB(URL_SET, 'set'),
-    loadGLB(URL_W,   'w'),
-  ]);
+  // Single GLB: picknickset.glb has all wood + Xshape/Ushape legs.
+  // W-Frame legs are procedurally generated (see buildWFrame) so the wood/metal
+  // joints are mathematically flush — no CAD-mismatch.
+  const setRoot = await loadGLB(URL_SET, 'set');
   models.SET = setRoot;
-  models.W   = wRoot;
   setRoot.visible = false;
-  wRoot.visible   = false;
 
-  // Wood / metal material assignment is the same for both files: meshes whose
-  // GLB material is "base material" become metal; everything else is wood.
-  function processRoot(root, preferEmbeddedTex){
-    root.traverse(o => {
-      if (!o.isMesh) return;
-      o.castShadow = true; o.receiveShadow = true;
-      const origMat = (o.material && o.material.name || '').toLowerCase();
-      const isMetalAccent = origMat === 'base material' || isLegMesh(o);
-      if (isMetalAccent){
-        o.material = makeMetalMaterial();
-      } else {
-        const origTex = o.material && o.material.map;
-        if (origTex && preferEmbeddedTex){
-          origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
-          origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          origTex.colorSpace = THREE.SRGBColorSpace;
-          origTex.needsUpdate = true;
-          woodTex = woodTex || origTex;
-        }
-        const m = new THREE.MeshStandardMaterial({
-          map: woodTex || origTex,
-          color: 0xffffff,
-          roughness: 0.72,
-          metalness: 0.0,
-        });
-        m.userData.isWood = true;
-        o.material = m;
+  setRoot.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    const origMat = (o.material && o.material.name || '').toLowerCase();
+    const isMetalAccent = origMat === 'base material' || isLegMesh(o);
+    if (isMetalAccent){
+      o.material = makeMetalMaterial();
+    } else {
+      const origTex = o.material && o.material.map;
+      if (origTex){
+        origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
+        origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        origTex.colorSpace = THREE.SRGBColorSpace;
+        origTex.needsUpdate = true;
+        woodTex = woodTex || origTex;
       }
-    });
-    scene.add(root);
-  }
-  // Process picknickset first so its embedded 2K wood texture is captured into
-  // woodTex, then apply the same wood to angle.glb meshes for visual consistency.
-  processRoot(setRoot, true);
-  processRoot(wRoot,   false);
-
-  // Move angle.glb's integrated W-legs into models.SET so we have a single
-  // scene root. Index them by length for quick lookup.
-  // Y-offset compensates for the thicker picknickset tabletop and benches.
-  const W_LEG_Y_OFFSET = 0.04;
-  window.__wLegs = {};
-  const legsToMove = [];
-  wRoot.traverse(o => {
-    const m = o.name && o.name.match(/^Table_legs_W_(\d+)$/);
-    if (m) legsToMove.push({ L: parseInt(m[1]), node: o });
+      const m = new THREE.MeshStandardMaterial({
+        map: woodTex || origTex,
+        color: 0xffffff,
+        roughness: 0.72,
+        metalness: 0.0,
+      });
+      m.userData.isWood = true;
+      o.material = m;
+    }
   });
-  for (const { L, node } of legsToMove){
-    // Bake world transform before re-parenting
-    node.updateWorldMatrix(true, false);
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    const scl = new THREE.Vector3();
-    node.matrixWorld.decompose(pos, quat, scl);
-    pos.y += W_LEG_Y_OFFSET;
-    node.position.copy(pos);
-    node.quaternion.copy(quat);
-    node.scale.copy(scl);
-    node.visible = false;
-    models.SET.add(node);
-    window.__wLegs[L] = node;
+  scene.add(setRoot);
+
+  // Generate the procedural W-frame for every Shopify length (mates exactly
+  // with picknickset wood dimensions — no scaling, no Y offset).
+  for (const L of SHOPIFY_LENGTHS){
+    const w = buildWFrame(L);
+    w.visible = false;
+    setRoot.add(w);
   }
-  // angle.glb root is no longer needed (its tabletop + benches are discarded
-  // in favour of picknickset's thicker wood).
-  scene.remove(wRoot);
-  models.W = null;
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
@@ -1249,7 +1225,7 @@ function applyVisibility(){
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|W_legs).*_\d+$/;
   root.traverse(o => {
     if (o.name && NAMED_VARIANT.test(o.name)){
       o.visible = false;
@@ -1274,36 +1250,6 @@ function applyVisibility(){
     }
   });
 
-  // W-Frame integrated legs (from angle.glb, indexed in window.__wLegs).
-  // The native angle.glb meshes have V-frames inset 27.5cm from each table end,
-  // but the real product (and X/U here) sit much tighter — about 7cm inset.
-  // We rescale Z so the V-frames end up at currentLength/2 - 7cm.
-  if (window.__wLegs){
-    if (currentFamily === 'W'){
-      const legNat = fam.legNativeLengths || fam.nativeLengths;
-      const legRenderL = legNat.reduce((b, n) =>
-        Math.abs(n - currentLength) < Math.abs(b - currentLength) ? n : b, legNat[0]);
-      // Measured native Z-bbox spans (V-frame positions) for each angle.glb variant
-      const NATIVE_LEG_BBOX_Z = { 160:1.05, 200:1.45, 250:1.95, 300:2.45, 350:2.95, 400:3.45 };
-      const INSET_M = 0.07;       // target inset from table end (matches X/U)
-      const targetSpan = (currentLength / 100) - 2 * INSET_M;
-      const legScaleZ = targetSpan / NATIVE_LEG_BBOX_Z[legRenderL];
-      for (const L of Object.keys(window.__wLegs)){
-        const node = window.__wLegs[L];
-        if (parseInt(L) === legRenderL){
-          node.visible = true;
-          node.scale.z = legScaleZ;
-        } else {
-          node.visible = false;
-          node.scale.z = 1;
-        }
-      }
-    } else {
-      for (const L of Object.keys(window.__wLegs)){
-        window.__wLegs[L].visible = false;
-      }
-    }
-  }
 
   // Backrest (W-Frame only). Shown when the family supports it AND backOn=true.
   // The whole group is one length-specific node (Backrest_W_<L>); individual
