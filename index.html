@@ -538,66 +538,64 @@ if (backUrl){
   });
 }
 
-// === Embedded GLB / wood URLs (served from GitHub raw to bypass any host limits) ===
-const CDN      = 'https://raw.githubusercontent.com/zazawoods/picnic-configurator/main';
-const URL_W    = CDN + '/angle.glb';
-const URL_X    = CDN + '/xset.glb';
-const URL_WOOD = CDN + '/wood.jpg';
+// === Embedded GLB URL — single complete asset hosted on GitHub Raw ===
+// picknickset_douglas.glb contains all leg styles, all bench variants and
+// every Shopify length natively. PBR wood + metal textures are embedded so
+// we no longer ship a separate wood.jpg.
+const CDN     = 'https://raw.githubusercontent.com/zazawoods/picnic-configurator/main';
+const URL_SET = CDN + '/picknickset_douglas.glb';
 
 // === Family configuration ===
-// lengths       — Shopify variant lengths shown in UI (each maps to a real SKU)
-// nativeLengths — physical GLB lengths; non-native lengths render the closest
-//                 native length with scale.z applied for the right look.
+// Every Shopify length is native in the new GLB, so no fallback scaling.
+// `legStyle` is the suffix used in the GLB node names (Table_legs_<legStyle>_<L>,
+// Benchlegs1/2_3planks_<legStyle>_<L>). Same `3planks_bench1/2_<L>` and
+// `Table_top_<L>` meshes are shared across all three families.
 const SHOPIFY_LENGTHS = [160,180,200,220,240,260,280,300,350,400];
+
+function makeMatch(legStyle){
+  return (name, L) => ({
+    bench1:     name === `3planks_bench1_${L}`,
+    bench2:     name === `3planks_bench2_${L}`,
+    legs:       name === `Table_legs_${legStyle}_${L}`,
+    benchlegs1: name === `Benchlegs1_3planks_${legStyle}_${L}`,
+    benchlegs2: name === `Benchlegs2_3planks_${legStyle}_${L}`,
+    top:        name === `Table_top_${L}`,
+  });
+}
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
-       // Procedural legs are produced for every Shopify length, so every
-       // length is "native" — no fallback scaling for the legs.
-       nativeLengths: [160,200,300,350,400],
+       nativeLengths: SHOPIFY_LENGTHS,         // every Shopify length is native
        label: 'W-Frame',
-       tabletop: '89×3 cm',
-       height: '≈70 cm',
+       tabletop: '89×9 cm',
+       height: '≈75 cm',
        productHandle: 'picknicktisch-aus-massivem-douglasienholz',
-       hasBackrest: true,   // backrest baked-in
-       hasBenchChoice: false, // 2 benches always
-       match: (name, L) => ({
-         backrest: name === `Backrest_W_${L}`,
-         bench:    name === `2benchplanks_W__${L}`,
-         legs:     name === `W_legs_${L}`,            // procedural — built for every Shopify length
-         top:      name === `Table_top_W_${L}`,
-       })},
+       hasBackrest: false,                    // Picknicktisch on site has no backrest
+       hasBenchChoice: false,                 // always 2 benches
+       legStyle: 'Aframe',                    // trapezoidal A-frame supports
+       match: makeMatch('Aframe') },
   X: { lengths: SHOPIFY_LENGTHS,
-       nativeLengths: [160,200,300,350,400],
+       nativeLengths: SHOPIFY_LENGTHS,
        label: 'X-Frame',
-       tabletop: '89×4.5 cm',
-       height: '≈70.5 cm',
+       tabletop: '89×9 cm',
+       height: '≈75 cm',
        productHandle: 'gartentisch-aus-massivem-douglasienholz',
        legOption: 'X-Tischbeine',
        hasBackrest: false,
        hasBenchChoice: true,
-       match: (name, L) => ({
-         backrest: name === `Backrest_X_${L}`,
-         bench:    name === `2benchplanks_X_${L}`,
-         // Procedural table X-legs + independent bench X-legs both count as "legs"
-         legs:     name === `X_legs_${L}` || name === `X_bench_legs_${L}`,
-         top:      name === `Table_top_X_${L}`,
-       })},
+       legStyle: 'Xshape',
+       match: makeMatch('Xshape') },
   U: { lengths: SHOPIFY_LENGTHS,
-       nativeLengths: SHOPIFY_LENGTHS, // U-legs are procedural — any length
+       nativeLengths: SHOPIFY_LENGTHS,
        label: 'U-Frame',
-       tabletop: '89×4.5 cm',
-       height: '≈70 cm',
+       tabletop: '89×9 cm',
+       height: '≈75 cm',
        productHandle: 'gartentisch-aus-massivem-douglasienholz',
        legOption: 'U-Tischbeine',
        hasBackrest: false,
        hasBenchChoice: true,
-       match: (name, L) => ({
-         backrest: name === `Backrest_X_${L}`,
-         bench:    name === `2benchplanks_X_${L}`,
-         legs:     name === `U_legs_${L}`,
-         top:      name === `Table_top_X_${L}`,
-       })},
+       legStyle: 'Ushape',
+       match: makeMatch('Ushape') },
 };
 
 function closestNative(family, L){
@@ -988,68 +986,50 @@ function makeMetalMaterial(){
 
 async function loadAll(){
   metalNormalTex = makeMetalNormalMap();
-  const [tex, w, x] = await Promise.all([loadWoodTex(), loadGLB(URL_W, 'angle'), loadGLB(URL_X, 'xset')]);
-  woodTex = tex;
-  models.W = w; models.X = x;
-  for (const k of Object.keys(models)){
-    const root = models[k];
-    root.visible = false;
-    root.traverse(o => {
-      if (o.isMesh){
-        o.castShadow = true; o.receiveShadow = true;
-        // Read original material name BEFORE overwriting. In the source GLBs the
-        // metal accents (backrest support brackets, hardware) use material name
-        // 'base material' while wooden parts use 'base table'. Anything matching
-        // 'base material' is treated as metal so it gets the leg color.
-        const origMat = (o.material && o.material.name || '').toLowerCase();
-        const isMetalAccent = origMat === 'base material';
-        if (isLegMesh(o) || isMetalAccent){
-          o.material = makeMetalMaterial();
-        } else {
-          const tex = alignWoodToMesh(o, woodTex);
-          const m = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.78, metalness: 0.0 });
-          m.userData.isWood = true; o.material = m;
-        }
+  // Single GLB now contains every leg style, every length, both benches, every
+  // bench-leg variant, and embedded PBR textures. Materials are tagged in the
+  // GLB itself: "base table" = wood, "base material" = metal accents.
+  const root = await loadGLB(URL_SET, 'set');
+  models.SET = root;
+  root.visible = false;
+
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    const origMat = (o.material && o.material.name || '').toLowerCase();
+    const isMetalAccent = origMat === 'base material' || isLegMesh(o);
+    if (isMetalAccent){
+      o.material = makeMetalMaterial();
+    } else {
+      // Keep the GLB-embedded wood texture (high-quality 2K Albedo). Wrap to
+      // tile across longer planks, apply colour-managed material.
+      const origTex = o.material && o.material.map;
+      if (origTex){
+        origTex.wrapS = origTex.wrapT = THREE.RepeatWrapping;
+        origTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        origTex.colorSpace = THREE.SRGBColorSpace;
+        origTex.needsUpdate = true;
+        woodTex = woodTex || origTex; // remember for any future tint use
       }
-    });
-    scene.add(root);
-  }
-  // U-frame: attach procedurally-generated U-leg groups (one per Shopify length).
-  for (const L of FAMILIES.U.lengths){
-    const u = buildULegs(L);
-    u.visible = false;
-    models.X.add(u);
-  }
-  // W-frame: procedural sheet-metal legs replace the cluttered baked-in GLB legs,
-  // matching the customer product photos (clean trapezoidal supports at each end).
-  for (const L of FAMILIES.W.lengths){
-    const w = buildWLegs(L);
-    w.visible = false;
-    models.W.add(w);
-  }
-  // X-frame: procedural clean X-legs at each table end + independent small
-  // X-legs under each bench end. Matches the real product (photo 3): table
-  // and benches are free-standing pieces, each with its own X-legs.
-  for (const L of FAMILIES.X.lengths){
-    const x = buildXLegs(L);
-    x.visible = false;
-    models.X.add(x);
-    const xb = buildXBenchLegs(L);
-    xb.visible = false;
-    models.X.add(xb);
-  }
+      const m = new THREE.MeshStandardMaterial({
+        map: origTex || woodTex,
+        color: 0xffffff,
+        roughness: 0.72,
+        metalness: 0.0,
+      });
+      m.userData.isWood = true;
+      o.material = m;
+    }
+  });
+  scene.add(root);
 
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
 }
 
-// Returns the scene root for a given family. U-family shares the X scene because
-// the wooden parts (tabletop, benches, backrest) are reused; only the legs differ.
-function rootForFamily(fam){
-  if (fam === 'U') return models.X;
-  return models[fam];
-}
+// Single scene for all families — only leg/bench-leg meshes differ.
+function rootForFamily(fam){ return models.SET; }
 
 function applyTint(hex){
   const c = new THREE.Color(hex);
@@ -1076,90 +1056,38 @@ function applyVisibility(){
   const root = rootForFamily(currentFamily);
   if (!root) return;
   root.visible = true;
-  for (const k of Object.keys(models)){
-    if (models[k] && models[k] !== root) models[k].visible = false;
-  }
 
-  const renderL = closestNative(currentFamily, currentLength);
-  const scaleZ  = currentLength / renderL;
+  // Bench-count semantics (matches Shopify "Anzahl der Bänke"):
+  //   2 benches → show bench1 + bench2 + both bench-leg sets
+  //   1 bench   → show bench2 only (right side) + benchlegs2 only
+  //   0 benches → no bench, no bench legs
+  // W-Frame (Picknicktisch) has no bench choice — always 2 benches.
+  const benches = fam.hasBenchChoice ? benchCount : 2;
+  const showBench1 = benches >= 2;
+  const showBench2 = benches >= 1;
 
-  // Pass 1: hide EVERY length-specific named variant in the scene by pattern.
-  // The GLBs contain length variants (e.g. 250cm) not in our Shopify list, so
-  // a per-L iteration would miss them and they'd leak through. We only target
-  // LEAF nodes whose name ends with `_<digits>` — parent group nodes (like
-  // "2benchplanks_X" with no length suffix) must stay visible because their
-  // descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|2benchplanks|Backrest|Table_legs|U_legs|W_legs|X_legs|X_bench_legs).*_\d+$/;
+  // Pass 1: hide every length-specific named variant. We only target LEAF
+  // nodes whose name ends with `_<digits>` — parent group nodes (like
+  // "3benchplanks_1" without a length suffix) must stay visible because
+  // their descendants inherit visibility from them.
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
   root.traverse(o => {
-    if (!o.name || !NAMED_VARIANT.test(o.name)) return;
-    o.visible = false;
-    o.scale.z = 1;
+    if (o.name && NAMED_VARIANT.test(o.name)){ o.visible = false; }
   });
-  // W-Frame: hide the baked-in GLB legs entirely — replaced by procedural W_legs_<L>.
-  // (Already covered by HIDE_PATTERNS above, but explicit for safety.)
 
-  // Pass 2: enable the right pieces for currentLength using renderL, with scale
-  const shouldShowBench = (fam.hasBenchChoice ? benchCount > 0 : true);
-  const shouldShowBack  = (fam.hasBackrest ? backOn : false);
-
-  // For "1 Sitzbank" we clip the bench mesh at x = 0 so only one side is shown.
-  // The bench geometry is symmetric across x; clipping a half gives a clean look.
-  const benchClipPlanes = (fam.hasBenchChoice && benchCount === 1)
-    ? [ new THREE.Plane(new THREE.Vector3(1, 0, 0), 0) ] // keep x > 0 side
-    : null;
-  // Backrest follows the same logic (only relevant for W which has fixed backrest,
-  // but apply for safety).
-  const backClipPlanes = (fam.hasBenchChoice && benchCount === 1)
-    ? [ new THREE.Plane(new THREE.Vector3(1, 0, 0), 0) ]
-    : null;
-
+  // Pass 2: enable exactly the meshes for this family at this length.
   root.traverse(o => {
     if (!o.name) return;
-    const r = fam.match(o.name, renderL);
-    if (!(r.top || r.legs || r.bench || r.backrest)) return;
+    const r = fam.match(o.name, currentLength);
     let show = false;
-    if (r.top)           show = true;
-    else if (r.bench)    show = shouldShowBench;
-    else if (r.backrest) show = shouldShowBack;
-    else if (r.legs){
-      if (currentFamily === 'U' && /^U_legs_/.test(o.name)) show = true;
-      else if (currentFamily === 'X' && (/^X_legs_/.test(o.name) || /^X_bench_legs_/.test(o.name))) show = true;
-      else if (currentFamily === 'W' && /^W_legs_/.test(o.name)) show = true;
-    }
-    if (show){
-      o.visible = true;
-      // Procedural legs (U/W/X) are built per-length, don't scale them
-      if (!/^U_legs_|^W_legs_|^X_legs_|^X_bench_legs_/.test(o.name)) o.scale.z = scaleZ;
-      // Apply / remove clipping for benches & backrests
-      if (o.isMesh && o.material){
-        if (r.bench)         o.material.clippingPlanes = benchClipPlanes;
-        else if (r.backrest) o.material.clippingPlanes = backClipPlanes;
-        else                 o.material.clippingPlanes = null;
-        o.material.needsUpdate = true;
-      } else {
-        // For groups, clip every child mesh
-        o.traverse(c => {
-          if (c.isMesh && c.material){
-            if (r.bench)         c.material.clippingPlanes = benchClipPlanes;
-            else if (r.backrest) c.material.clippingPlanes = backClipPlanes;
-            else                 c.material.clippingPlanes = null;
-            c.material.needsUpdate = true;
-          }
-        });
-      }
-    }
+    if      (r.top)        show = true;
+    else if (r.bench1)     show = showBench1;
+    else if (r.bench2)     show = showBench2;
+    else if (r.legs)       show = true;
+    else if (r.benchlegs1) show = showBench1;
+    else if (r.benchlegs2) show = showBench2;
+    if (show){ o.visible = true; }
   });
-
-  // Procedural bench-leg side filter — when the user picks "1 bench" we keep
-  // the bench on x > 0 (matches benchClipPlanes). For "no bench" we hide all.
-  if (fam.hasBenchChoice){
-    root.traverse(o => {
-      if (o.isMesh && o.userData && o.userData.isBenchLeg){
-        if (benchCount === 0) o.visible = false;
-        else if (benchCount === 1) o.visible = (o.userData.benchSide > 0);
-      }
-    });
-  }
 
   frameCameraToSelection();
   updateSummary();
