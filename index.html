@@ -1033,32 +1033,20 @@ function applyVisibility(){
   const renderL = closestNative(currentFamily, currentLength);
   const scaleZ  = currentLength / renderL;
 
-  // Pass 1: hide every named asset, reset scales
-  for (const L of fam.nativeLengths){
-    root.traverse(o => {
-      if (!o.name) return;
-      const r = fam.match(o.name, L);
-      if (r.top || r.legs || r.bench || r.backrest){
-        o.visible = false;
-        o.scale.z = 1;
-      }
-    });
-  }
-  // Reset every leg-group (procedural and baked-in) so nothing leaks between
-  // families. The right ones get re-enabled in pass 2.
+  // Pass 1: hide EVERY named asset in the scene by pattern. The GLBs contain
+  // length variants (e.g. 250cm) that aren't in our Shopify length list, so a
+  // per-L iteration would miss them and they'd leak through. A blanket regex
+  // hide is safer — Pass 2 selectively re-enables exactly what's needed.
+  const HIDE_PATTERNS = /^Table_top_|^2benchplanks_|^Backrest_|^Table_legs_|^U_legs_|^W_legs_|^X_bench_legs_/;
   root.traverse(o => {
     if (!o.name) return;
-    if (/^Table_legs_X_|^U_legs_|^W_legs_|^X_bench_legs_/.test(o.name)){
-      o.visible = false; o.scale.z = 1;
+    if (HIDE_PATTERNS.test(o.name)){
+      o.visible = false;
+      o.scale.z = 1;
     }
   });
-  // W-Frame: hide the baked-in GLB legs entirely — they're replaced by the
-  // procedural W_legs_<L> generated in loadAll().
-  if (currentFamily === 'W'){
-    root.traverse(o => {
-      if (o.name && /^Table_legs_W_/.test(o.name)){ o.visible = false; o.scale.z = 1; }
-    });
-  }
+  // W-Frame: hide the baked-in GLB legs entirely — replaced by procedural W_legs_<L>.
+  // (Already covered by HIDE_PATTERNS above, but explicit for safety.)
 
   // Pass 2: enable the right pieces for currentLength using renderL, with scale
   const shouldShowBench = (fam.hasBenchChoice ? benchCount > 0 : true);
@@ -1191,11 +1179,13 @@ function updatePrice(){
   const fam = FAMILIES[currentFamily];
   const handle = fam.productHandle;
   const product = handle ? productCache[handle] : null;
+  // Always show the price box — display "—" while data is still loading.
+  box.hidden = false;
   if (!product){
-    box.hidden = true;
+    el.textContent = '—';
+    el.classList.add('loading');
     return;
   }
-  box.hidden = false;
   const benches = fam.hasBenchChoice ? benchCount : 2;
   const v = findVariantInProduct(product, fam, currentLength, benches);
   if (v){
@@ -1233,6 +1223,37 @@ const __pdInt = setInterval(() => {
   }
   requestProductData();
 }, 600);
+
+// Standalone fallback: when the configurator is opened directly (not iframed by
+// the Shopify theme), the postMessage handshake never resolves. We fetch the
+// product JSON straight from the shop instead — Shopify's /products/*.js endpoint
+// is CORS-friendly so this works from any origin.
+async function fetchProductDataDirect(){
+  // Only run when there's no parent (standalone tab) — inside the Shopify theme
+  // iframe we want the postMessage path so the same product instance the parent
+  // already has is reused.
+  if (window.parent && window.parent !== window) return;
+  const SHOP_ORIGIN = 'https://zazawoods.de';
+  const handles = new Set();
+  for (const k of Object.keys(FAMILIES)){
+    const h = FAMILIES[k].productHandle;
+    if (h) handles.add(h);
+  }
+  for (const h of handles){
+    try {
+      const r = await fetch(`${SHOP_ORIGIN}/products/${h}.js`, { mode: 'cors' });
+      if (!r.ok) continue;
+      const p = await r.json();
+      if (p && p.handle){
+        productCache[p.handle] = p;
+        updatePrice();
+      }
+    } catch(_){
+      // CORS or network — silently fall back to dash placeholder
+    }
+  }
+}
+fetchProductDataDirect();
 
 function updateSummary(){
   const fam = FAMILIES[currentFamily];
