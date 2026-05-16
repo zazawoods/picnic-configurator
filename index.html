@@ -574,25 +574,24 @@ function makeMatch(legStyle){
 
 const FAMILIES = {
   W: { lengths: SHOPIFY_LENGTHS,
-       // angle.glb has these 6 native lengths; missing Shopify lengths are
-       // rendered from the closest native with scale.z applied.
-       nativeLengths: [160, 200, 250, 300, 350, 400],
+       nativeLengths: SHOPIFY_LENGTHS,                // wood is all native
+       legNativeLengths: [160, 200, 250, 300, 350, 400],  // angle.glb leg variants
        label: 'W-Frame',
-       tabletop: '89×3 cm',
-       height: '≈70 cm',
+       tabletop: '89×9 cm',
+       height: '≈75 cm',
        productHandle: 'picknicktisch-aus-massivem-douglasienholz',
-       hasBackrest: false,                    // no backrest on Picknicktisch
-       hasBenchChoice: false,                 // always 2 benches
+       hasBackrest: false,
+       hasBenchChoice: false,
        legStyle: 'W',
-       // W uses the original angle.glb naming. Table_legs_W is the INTEGRATED
-       // metal frame supporting table + both benches at each end.
+       // W uses picknickset's thick wood. The integrated W-leg from angle.glb
+       // is handled separately in applyVisibility (see __wLegs lookup).
        match: (name, L) => ({
-         bench1:     name === `2benchplanks_W__${L}`, // shared bench mesh (left+right combined)
-         bench2:     false,                            // angle.glb has a single bench mesh
-         legs:       name === `Table_legs_W_${L}`,
+         bench1:     name === `3planks_bench1_${L}`,
+         bench2:     name === `3planks_bench2_${L}`,
+         legs:       false,                            // handled specially
          benchlegs1: false,
          benchlegs2: false,
-         top:        name === `Table_top_W_${L}`,
+         top:        name === `Table_top_${L}`,
        }) },
   X: { lengths: SHOPIFY_LENGTHS,
        nativeLengths: SHOPIFY_LENGTHS,
@@ -1165,15 +1164,43 @@ async function loadAll(){
   processRoot(setRoot, true);
   processRoot(wRoot,   false);
 
+  // Move angle.glb's integrated W-legs into models.SET so we have a single
+  // scene root. Index them by length for quick lookup.
+  // Y-offset compensates for the thicker picknickset tabletop and benches.
+  const W_LEG_Y_OFFSET = 0.04;
+  window.__wLegs = {};
+  const legsToMove = [];
+  wRoot.traverse(o => {
+    const m = o.name && o.name.match(/^Table_legs_W_(\d+)$/);
+    if (m) legsToMove.push({ L: parseInt(m[1]), node: o });
+  });
+  for (const { L, node } of legsToMove){
+    // Bake world transform before re-parenting
+    node.updateWorldMatrix(true, false);
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const scl = new THREE.Vector3();
+    node.matrixWorld.decompose(pos, quat, scl);
+    pos.y += W_LEG_Y_OFFSET;
+    node.position.copy(pos);
+    node.quaternion.copy(quat);
+    node.scale.copy(scl);
+    node.visible = false;
+    models.SET.add(node);
+    window.__wLegs[L] = node;
+  }
+  // angle.glb root is no longer needed (its tabletop + benches are discarded
+  // in favour of picknickset's thicker wood).
+  scene.remove(wRoot);
+  models.W = null;
+
   applyTint(tintHex); applyLegColor(legHex);
   document.getElementById('loading').classList.add('hidden');
   setFamily(currentFamily, true);
 }
 
-// W lives in models.W (angle.glb); X and U share models.SET (picknickset.glb).
-function rootForFamily(fam){
-  return fam === 'W' ? models.W : models.SET;
-}
+// Single scene root: everything (X/U/W wood + W legs) lives in models.SET.
+function rootForFamily(fam){ return models.SET; }
 
 function applyTint(hex){
   const c = new THREE.Color(hex);
@@ -1222,7 +1249,7 @@ function applyVisibility(){
   // nodes whose name ends with `_<digits>` — parent group nodes (like
   // "3benchplanks_1" without a length suffix) must stay visible because
   // their descendants inherit visibility from them.
-  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks|2benchplanks_W|Backrest_W).*_\d+$/;
+  const NAMED_VARIANT = /^(Table_top|3planks_bench[12]|Table_legs|Benchlegs[12]_3planks).*_\d+$/;
   root.traverse(o => {
     if (o.name && NAMED_VARIANT.test(o.name)){
       o.visible = false;
@@ -1246,6 +1273,33 @@ function applyVisibility(){
       if (scaleZ !== 1) o.scale.z = scaleZ;
     }
   });
+
+  // W-Frame integrated legs (from angle.glb, indexed in window.__wLegs).
+  // Use the leg-specific native length list — wood is always native (10 lengths),
+  // but legs have only 6 native variants, so close-match + scale for the rest.
+  if (window.__wLegs){
+    if (currentFamily === 'W'){
+      const legNat = fam.legNativeLengths || fam.nativeLengths;
+      const legRenderL = legNat.reduce((b, n) =>
+        Math.abs(n - currentLength) < Math.abs(b - currentLength) ? n : b, legNat[0]);
+      const legScaleZ = currentLength / legRenderL;
+      for (const L of Object.keys(window.__wLegs)){
+        const node = window.__wLegs[L];
+        if (parseInt(L) === legRenderL){
+          node.visible = true;
+          node.scale.z = legScaleZ;
+        } else {
+          node.visible = false;
+          node.scale.z = 1;
+        }
+      }
+    } else {
+      // hide all W legs when family isn't W
+      for (const L of Object.keys(window.__wLegs)){
+        window.__wLegs[L].visible = false;
+      }
+    }
+  }
 
   // Backrest (W-Frame only). Shown when the family supports it AND backOn=true.
   // The whole group is one length-specific node (Backrest_W_<L>); individual
