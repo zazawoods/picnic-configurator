@@ -617,6 +617,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
+window.__scene = scene; // debug
 scene.background = new THREE.Color(0xf3f1ec);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -1033,17 +1034,17 @@ function applyVisibility(){
   const renderL = closestNative(currentFamily, currentLength);
   const scaleZ  = currentLength / renderL;
 
-  // Pass 1: hide EVERY named asset in the scene by pattern. The GLBs contain
-  // length variants (e.g. 250cm) that aren't in our Shopify length list, so a
-  // per-L iteration would miss them and they'd leak through. A blanket regex
-  // hide is safer — Pass 2 selectively re-enables exactly what's needed.
-  const HIDE_PATTERNS = /^Table_top_|^2benchplanks_|^Backrest_|^Table_legs_|^U_legs_|^W_legs_|^X_bench_legs_/;
+  // Pass 1: hide EVERY length-specific named variant in the scene by pattern.
+  // The GLBs contain length variants (e.g. 250cm) not in our Shopify list, so
+  // a per-L iteration would miss them and they'd leak through. We only target
+  // LEAF nodes whose name ends with `_<digits>` — parent group nodes (like
+  // "2benchplanks_X" with no length suffix) must stay visible because their
+  // descendants inherit visibility from them.
+  const NAMED_VARIANT = /^(Table_top|2benchplanks|Backrest|Table_legs|U_legs|W_legs|X_bench_legs).*_\d+$/;
   root.traverse(o => {
-    if (!o.name) return;
-    if (HIDE_PATTERNS.test(o.name)){
-      o.visible = false;
-      o.scale.z = 1;
-    }
+    if (!o.name || !NAMED_VARIANT.test(o.name)) return;
+    o.visible = false;
+    o.scale.z = 1;
   });
   // W-Frame: hide the baked-in GLB legs entirely — replaced by procedural W_legs_<L>.
   // (Already covered by HIDE_PATTERNS above, but explicit for safety.)
